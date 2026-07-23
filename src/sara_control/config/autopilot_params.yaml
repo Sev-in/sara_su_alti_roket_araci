@@ -25,7 +25,9 @@ autopilot_node:
     heading_kd: 0.25
     fin_yaw_limit: 1.0                # normalize [-1,1]
 
-    # --- Sephiye dongusu (step motor/siringa, uzun sureli derinlik koruma) ---
+    # --- Sephiye dongusu (step motor/siringa) ---
+    # Yalnizca G1_YUZEYE_CIKIS ve guvenli sonlandirma fazlarinda etkindir;
+    # normal dalis ve seyir pervane + kanatciklarla yapilir.
     buoyancy_kp: 0.15
     buoyancy_ki: 0.01
     buoyancy_limit: 1.0               # normalize [-1,1]

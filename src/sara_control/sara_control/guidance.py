@@ -14,8 +14,8 @@ Iki AYRI gorev profili destekler (parametre ile secilir: mission_id):
   GOREV 1 - Seyir Gorevi (mission_id=1), KTR Tablo 1 ile birebir:
     REFERANSLAMA
       -> AKUSTIK_UYARI_GOREV_BASLATMA   (mission_start_node: 60 sn motor inhibit)
-      -> DALIS                           (2 m derinlige in, sabit yerde)
-      -> G1_0_10M_KALIBRASYON            (0.895 m/s, ilk 10 m; sure sonunda baslar)
+      -> G1_0_10M_KALIBRASYON            (motor + kanatcikla ilerlerken 2 m'ye
+                                           dalis ve stabilizasyon; sure 10 m'de baslar)
       -> G1_10_40M_ANA_SEYIR             (1.076 m/s, 10-40 m)
       -> G1_40_50M_YAVASLAMA             (0.895 m/s, 40-50 m - madde4: kiyidan
                                            en az 50 m uzaklasma)
@@ -722,7 +722,8 @@ class GuidanceNode(Node):
         /sara/mission_start/motion_permission=True olmasini bekler.
 
         motion_permission geldiginde gorev tipine gore DALLANIR:
-          Gorev 1 -> DALIS (yerinde/sabit dalis, sonra ilk 10 m duz seyir)
+          Gorev 1 -> G1_0_10M_KALIBRASYON (ilk 10 m icinde motor ve
+                     kanatciklarla 2 m'ye dalis + stabilizasyon)
           Gorev 2 -> G2_ACILI_DALIS (ilerlerken dalis - KTR'de arac
                      yuzeyden basliyor ve "acili" sekilde dalıyor)
 
@@ -740,7 +741,7 @@ class GuidanceNode(Node):
 
         if self._motion_permission:
             if self.mission_id == 1:
-                self._goto_phase(PHASE_DALIS)
+                self._goto_phase(PHASE_G1_0_10M_KALIBRASYON)
             else:
                 self._race_timer_start = self.get_clock().now()
                 self.get_logger().info(
@@ -777,7 +778,16 @@ class GuidanceNode(Node):
         self._forward_motion = True
         self._target_speed = self.g1_calib_speed
 
-        if self._approx_distance() >= self.g1_initial_timing_distance:
+        flight_stable = self._conditions_held(
+            abs(self._depth - self.dive_target_depth) < self.depth_tol
+            and abs(self._pitch) < self.pitch_tol
+            and abs(self._heading_error_to(self._reference_heading))
+            < self.heading_tol
+        )
+        if (
+            self._approx_distance() >= self.g1_initial_timing_distance
+            and flight_stable
+        ):
             self._race_timer_start = self.get_clock().now()
             self.get_logger().info('Ilk 10 m tamamlandi - yarisma suresi (ic telemetri) baslatildi.')
             self._goto_phase(PHASE_G1_10_40M_ANA_SEYIR)

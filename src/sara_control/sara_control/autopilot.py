@@ -427,8 +427,20 @@ class AutopilotNode(Node):
             heading_error = wrap_pi(self._target_heading - self._heading)
             fin_yaw = self.pid_heading.update(heading_error, self._yaw_rate, dt)
 
-            # --- Sephiye PID -> step motor/siringa (uzun sureli derinlik koruma) ---
-            buoyancy = self.pid_buoyancy.update(depth_error, depth_rate, dt)
+            # --- Sephiye/siringa ---
+            # Normal dalis, seyir ve donus pervane + hidrodinamik kontrol
+            # yuzeyleriyle yapilir. Siringa Gorev 1 sonunda yuzeye cikmak
+            # icin ayrilmistir.
+            buoyancy_allowed = self._mission_phase in (
+                'G1_YUZEYE_CIKIS',
+                'GUVENLI_SONLANDIRMA',
+            )
+            if buoyancy_allowed:
+                buoyancy = self.pid_buoyancy.update(
+                    depth_error, depth_rate, dt)
+            else:
+                self.pid_buoyancy.reset()
+                buoyancy = 0.0
 
             # --- Itki: gorev fazina gore (gudumun forward_motion_request'i +
             # target_speed'i). DUZELTME: artik SABIT nominal_thrust DEGIL,

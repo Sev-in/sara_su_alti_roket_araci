@@ -25,7 +25,8 @@ guidance_node:
 
     # --- Faz hizlari (KTR Tablo 1 / Tablo 2 ile dogrulanan gercek degerler) ---
     max_calibrated_speed_ms: 1.076    # tam itkide (thrust=1.0) ulasilan hiz
-    g1_calib_speed_ms: 0.895          # G1_0_10M_KALIBRASYON, G1_40_50M_YAVASLAMA,
+    g1_calib_speed_ms: 0.895          # ilk 10 m dinamik dalis/stabilizasyon,
+                                       # G1_40_50M_YAVASLAMA,
                                        # G1_U_DONUS, G1_KIYIYA_YAKLASMA
     g1_cruise_speed_ms: 1.076         # G1_10_40M_ANA_SEYIR, G1_GERI_DONUS_HIZLI
     # DUZELTME (KTR Tablo 1 - Gorev 2 hata duzeltmesi): KTR'de bu faza
