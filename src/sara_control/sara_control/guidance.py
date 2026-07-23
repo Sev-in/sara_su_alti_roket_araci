@@ -15,10 +15,8 @@ Iki AYRI gorev profili destekler (parametre ile secilir: mission_id):
     REFERANSLAMA
       -> AKUSTIK_UYARI_GOREV_BASLATMA   (mission_start_node: 60 sn motor inhibit)
       -> DALIS                           (2 m derinlige in, sabit yerde)
-      -> G1_0_10M_KALIBRASYON            (0.895 m/s, ilk 10 m - yarisma suresi bu
-                                           fazin SONUNDA baslar, sartname 6.1.1,
-                                           bu fazin kendi suresi DAHIL DEGILDIR)
-      -> G1_10_40M_ANA_SEYIR             (1.076 m/s, 10-40 m)
+      -> G1_0_40M_ANA_SEYIR              (1.076 m/s, 0-40 m; baslangicta
+                                           ayri bir 10 m kalibrasyon bacagi YOK)
       -> G1_40_50M_YAVASLAMA             (0.895 m/s, 40-50 m - madde4: kiyidan
                                            en az 50 m uzaklasma)
       -> G1_U_DONUS                      (0.895 m/s, heading 180 derece donene kadar)
@@ -167,7 +165,7 @@ PHASE_NAMES = {
     PHASE_AKUSTIK_UYARI_GOREV_BASLATMA: 'AKUSTIK_UYARI_GOREV_BASLATMA',
     PHASE_DALIS: 'DALIS',
     PHASE_G1_0_10M_KALIBRASYON: 'G1_0_10M_KALIBRASYON',
-    PHASE_G1_10_40M_ANA_SEYIR: 'G1_10_40M_ANA_SEYIR',
+    PHASE_G1_10_40M_ANA_SEYIR: 'G1_0_40M_ANA_SEYIR',
     PHASE_G1_40_50M_YAVASLAMA: 'G1_40_50M_YAVASLAMA',
     PHASE_G1_U_DONUS: 'G1_U_DONUS',
     PHASE_G1_GERI_DONUS_HIZLI: 'G1_GERI_DONUS_HIZLI',
@@ -251,7 +249,7 @@ class GuidanceNode(Node):
 
         # --- Faz hizlari (KTR Tablo 1 / Tablo 2 ile dogrulanan gercek degerler) ---
         self.declare_parameter('max_calibrated_speed_ms', 1.076)   # tam itkide (thrust=1.0) ulasilan hiz
-        self.declare_parameter('g1_calib_speed_ms', 0.895)          # G1_0_10M_KALIBRASYON, G1_40_50M_YAVASLAMA,
+        self.declare_parameter('g1_calib_speed_ms', 0.895)          # G1_40_50M_YAVASLAMA,
                                                                           # G1_U_DONUS, G1_KIYIYA_YAKLASMA (KTR'nin
                                                                           # ortak 0.895 m/s degeri)
         self.declare_parameter('g1_cruise_speed_ms', 1.076)          # G1_10_40M_ANA_SEYIR, G1_GERI_DONUS_HIZLI
@@ -263,8 +261,7 @@ class GuidanceNode(Node):
         self.declare_parameter('g2_ascend_speed_ms', 0.340)            # G2_TIRMANIS_35_DERECE
 
         # --- Gorev 1 (Seyir) mesafe esikleri - KTR Tablo 1 ile birebir ---
-        self.declare_parameter('g1_kalibrasyon_distance_m', 10.0)       # 0-10m kalibrasyon sonu /
-                                                                              # sartname 6.1.1: bitis cizgisi konumu
+        self.declare_parameter('g1_finish_distance_from_shore_m', 10.0) # Gorev sonunda kiyidan uzaklik
         self.declare_parameter('g1_ana_seyir_distance_m', 40.0)          # 10-40m ana seyir sonu
         self.declare_parameter('g1_uzaklasma_min_distance_m', 50.0)       # 40-50m yavaslama sonu /
                                                                               # madde4: kiyidan en az 50m
@@ -315,7 +312,8 @@ class GuidanceNode(Node):
         self.g2_transit_speed = self.get_parameter('g2_transit_speed_ms').value
         self.g2_ascend_speed = self.get_parameter('g2_ascend_speed_ms').value
 
-        self.g1_kalibrasyon_distance = self.get_parameter('g1_kalibrasyon_distance_m').value
+        self.g1_finish_distance_from_shore = self.get_parameter(
+            'g1_finish_distance_from_shore_m').value
         self.g1_ana_seyir_distance = self.get_parameter('g1_ana_seyir_distance_m').value
         self.g1_uzaklasma_min_distance = self.get_parameter('g1_uzaklasma_min_distance_m').value
         self.g1_yaklasma_baslangic_m = self.get_parameter('g1_yaklasma_baslangic_m').value
@@ -340,10 +338,8 @@ class GuidanceNode(Node):
         self._mission_start_time = self.get_clock().now()
         self._phase_start_time = self.get_clock().now()
         self._condition_hold_start = None
-        # YARISMA suresi isaretcisi (sartname 6.1.1'in birebir okumasiyla,
-        # ilk hareket bacagi/kalibrasyon fazi HARIC tutulur):
-        #   Gorev 1: ilk 10m TAMAMLANDIKTAN SONRA (G1_0_10M_KALIBRASYON'un
-        #            SONUNDA) baslar - bu fazin kendi suresi DAHIL DEGILDIR
+        # YARISMA suresi isaretcisi:
+        #   Gorev 1: yerinde dalis tamamlanip yatay seyir basladiginda
         #   Gorev 2: 60 sn motor inhibit tamamlanip G2_ACILI_DALIS basladiginda
         self._race_timer_start = None
         self._race_elapsed_frozen = None   # YENI: terminal faza girince donan yarisma suresi
@@ -502,7 +498,8 @@ class GuidanceNode(Node):
         """G1'de bitis cizgisi, kiyidan g1_kalibrasyon_distance (10m)
         uzaklikta - sartname 6.1.1: 'kiyidan 10 metre uzaklıktaki
         baslangic/bitis cizgisi'."""
-        return abs(self._approx_distance() - self.g1_kalibrasyon_distance)
+        return abs(
+            self._approx_distance() - self.g1_finish_distance_from_shore)
 
     def _nav_ok(self) -> bool:
         if self._last_nav_status_time is None:
@@ -552,10 +549,8 @@ class GuidanceNode(Node):
             # "yarisma suresi" alani, node baslangicindan itibaren gecen
             # HAM sureyi (start_command'i elle gonderene kadar bekleme +
             # 60 sn motor inhibit dahil, yaniltici) DEGIL, GERCEK YARISMA
-            # SURESINI yansitir. Sartname 6.1.1'in birebir okumasiyla:
-            #   Gorev 1: ilk 10m TAMAMLANDIKTAN SONRA baslar (bu ilk
-            #            kalibrasyon bacaginin suresi yarisma suresine
-            #            DAHIL DEGILDIR)
+            # SURESINI yansitir:
+            #   Gorev 1: yerinde dalis tamamlanip yatay seyir basladiginda
             #   Gorev 2: 60sn motor inhibit tamamlanip G2_ACILI_DALIS
             #            basladiginda baslar
             # Yarisma henuz baslamamissa (race_timer_start=None) acikca
@@ -637,8 +632,6 @@ class GuidanceNode(Node):
             self._run_akustik_uyari()
         elif self._phase == PHASE_DALIS:
             self._run_dalis()
-        elif self._phase == PHASE_G1_0_10M_KALIBRASYON:
-            self._run_g1_0_10m_kalibrasyon()
         elif self._phase == PHASE_G1_10_40M_ANA_SEYIR:
             self._run_g1_10_40m_ana_seyir()
         elif self._phase == PHASE_G1_40_50M_YAVASLAMA:
@@ -714,7 +707,7 @@ class GuidanceNode(Node):
         /sara/mission_start/motion_permission=True olmasini bekler.
 
         motion_permission geldiginde gorev tipine gore DALLANIR:
-          Gorev 1 -> DALIS (yerinde/sabit dalis, sonra 0-10m kalibrasyon)
+          Gorev 1 -> DALIS (yerinde/sabit dalis, sonra dogrudan ana seyir)
           Gorev 2 -> G2_ACILI_DALIS (ilerlerken dalis - KTR'de arac
                      yuzeyden basliyor ve "acili" sekilde dalıyor)
 
@@ -741,11 +734,11 @@ class GuidanceNode(Node):
                 self._goto_phase(PHASE_G2_ACILI_DALIS)
 
     def _run_dalis(self):
-        """SADECE Gorev 1 icin: baslangic alanindan itibaren yerinde/sabit
-        2 m derinlige inis (sartname 6.1.1). Yarisma suresi BU FAZDA
-        BASLATILMAZ - sartname 6.1.1'in birebir okumasiyla, yarisma
-        suresi ilk 10 m TAMAMLANDIKTAN SONRA baslar (bkz.
-        _run_g1_0_10m_kalibrasyon)."""
+        """Gorev 1 icin baslangic alaninda yerinde 2 m derinlige inis.
+
+        Dalis tamamlaninca ayri bir 10 m bacagi kosulmadan dogrudan
+        0-40 m ana seyir baslatilir.
+        """
         self._forward_motion = False
         self._target_speed = 0.0
         self._target_depth = self.dive_target_depth
@@ -754,10 +747,20 @@ class GuidanceNode(Node):
 
         depth_ok = abs(self._depth - self.dive_target_depth) < self.depth_tol
         if self._conditions_held(depth_ok):
-            self._goto_phase(PHASE_G1_0_10M_KALIBRASYON)
+            self._race_timer_start = self.get_clock().now()
+            self.get_logger().info(
+                'Dalis tamamlandi - yatay seyir ve yarisma suresi baslatildi.')
+            self._goto_phase(PHASE_G1_10_40M_ANA_SEYIR)
 
     # ---------------------------------------------------------- GOREV 1 (KTR Tablo 1)
     def _run_g1_0_10m_kalibrasyon(self):
+        # Geri uyumluluk: bu eski faz artik ana akistan cagrilmaz. Eski bir
+        # durum kaydi bu fazi yuklerse 10 m ilerlemeden ana seyire gec.
+        if self._race_timer_start is None:
+            self._race_timer_start = self.get_clock().now()
+        self._goto_phase(PHASE_G1_10_40M_ANA_SEYIR)
+        return
+
         """KTR: '0-10 m kalibrasyon' fazi - dusuk/kalibrasyon hizi (0.895 m/s).
         Sartname 6.1.1: 'SARA, ... 10 metre ilerledikten sonra süre
         başlatılacaktır.' Bu yuzden yarisma suresi bu fazin SONUNDA
@@ -775,7 +778,7 @@ class GuidanceNode(Node):
             self._goto_phase(PHASE_G1_10_40M_ANA_SEYIR)
 
     def _run_g1_10_40m_ana_seyir(self):
-        """KTR: '10-40 m ana seyir' fazi - cruise hizi (1.076 m/s)."""
+        """Gorev 1 ana seyri: baslangictan 40 m'ye cruise hizi."""
         self._target_depth = self.dive_target_depth
         self._target_heading = self._reference_heading
         self._target_pitch = 0.0

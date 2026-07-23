@@ -24,7 +24,7 @@ guidance_node:
 
     # --- Faz hizlari (KTR Tablo 1 / Tablo 2 ile dogrulanan gercek degerler) ---
     max_calibrated_speed_ms: 1.076    # tam itkide (thrust=1.0) ulasilan hiz
-    g1_calib_speed_ms: 0.895          # G1_0_10M_KALIBRASYON, G1_40_50M_YAVASLAMA,
+    g1_calib_speed_ms: 0.895          # G1_40_50M_YAVASLAMA,
                                        # G1_U_DONUS, G1_KIYIYA_YAKLASMA
     g1_cruise_speed_ms: 1.076         # G1_10_40M_ANA_SEYIR, G1_GERI_DONUS_HIZLI
     # DUZELTME (KTR Tablo 1 - Gorev 2 hata duzeltmesi): KTR'de bu faza
@@ -39,13 +39,13 @@ guidance_node:
     g2_ascend_speed_ms: 0.340         # G2_TIRMANIS_35_DERECE
 
     # --- Gorev 1 (Seyir) mesafe esikleri - KTR Tablo 1 ile birebir ---
-    g1_kalibrasyon_distance_m: 10.0       # 0-10m kalibrasyon sonu / sartname 6.1.1:
-                                           # yarisma suresi burada baslar / bitis cizgisi konumu
+    # Yalnizca GOREV SONU hedefidir; baslangicta 10 m kalibrasyon bacagi yoktur.
+    g1_finish_distance_from_shore_m: 10.0 # kiyidan hedef bitis uzakligi
     g1_ana_seyir_distance_m: 40.0          # 10-40m ana seyir sonu
     g1_uzaklasma_min_distance_m: 50.0       # 40-50m yavaslama sonu / madde4: kiyidan en az 50m
     g1_yaklasma_baslangic_m: 15.0            # geri donus hizli seyir sonu (bitis cizgisine ~15m kala yavasla)
     # Sartname: Gorev 1, kiyidan 10 m uzaktaki baslangic/bitis alaninda
-    # sonlanir. Hedef konum g1_kalibrasyon_distance_m=10.0 ile tanimlidir;
+    # sonlanir. Hedef konum g1_finish_distance_from_shore_m=10.0 ile tanimlidir;
     # bu deger hedefin etrafindaki kabul yari genisligidir (8-12 m).
     g1_bitis_cizgisi_tolerance_m: 2.0
 
