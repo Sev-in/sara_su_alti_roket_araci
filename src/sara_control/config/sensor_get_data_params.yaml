@@ -10,8 +10,10 @@ sensor_data_node:
     imu_bridge_enabled: true
     mavros_imu_topic: '/mavros/imu/data'
 
-    # ADS1115 + SEN0257 (0--1.6 MPa, nominal 0.5--4.5 V)
-    pressure_enabled: true
+    # SEN0257 Arduino Uno A0'a baglidir. Ayni USB portunu tek sahip olarak
+    # actuator_driver acar ve /sara/pressure yayinlar. Bu nedenle ADS1115
+    # yolu kapatilir; iki node ayni sensoru yayinlamaz.
+    pressure_enabled: false
     i2c_bus: 7
     ads1115_address: 72          # 0x48
     ads1115_channel: 0
@@ -34,5 +36,6 @@ sensor_data_node:
     gpio_numbering_mode: 'BOARD'
     water_sensor_1_pin: 15       # burun
     water_sensor_2_pin: 16       # kuyruk
-    water_sensor_1_active_high: true
-    water_sensor_2_active_high: true
+    # Verilen Jetson test kodunda iki SEN0368 icin de su var seviyesi LOW.
+    water_sensor_1_active_high: false
+    water_sensor_2_active_high: false

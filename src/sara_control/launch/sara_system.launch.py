@@ -165,6 +165,9 @@ def generate_launch_description():
         executable='actuator_driver',
         name='actuator_driver',
         output='screen',
+        parameters=[
+            os.path.join(config_dir, 'actuator_driver_params.yaml'),
+        ],
         condition=IfCondition(is_hardware_mode),
     )
     sensor_get_data_node = Node(

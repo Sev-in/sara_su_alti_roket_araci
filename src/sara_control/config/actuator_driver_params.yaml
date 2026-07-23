@@ -1,0 +1,30 @@
+# Arduino Uno + PCA9685 donanim koprusu.
+actuator_driver:
+  ros__parameters:
+    serial_port: '/dev/ttyUSB0'
+    serial_baud: 115200
+    uno_boot_wait_s: 2.0
+    command_rate_hz: 20.0
+    heartbeat_rate_hz: 5.0
+    command_timeout_s: 0.5
+    reconnect_interval_s: 1.0
+
+    servo_center_deg: 90.0
+    pitch_max_offset_deg: 30.0
+    yaw_max_offset_deg: 20.0
+    # Ekli tezgah kodundaki mekanik yonler korunmustur.
+    pitch_sign: -1.0
+    yaw_sign: -1.0
+    nose_closed_deg: 0.0
+    nose_open_deg: 90.0
+
+    # Autopilot yuzeye cikis icin negatif sephiye komutu uretir.
+    buoyancy_surface_threshold: -0.05
+
+    # Uno, acilista aldigi sifira gore gauge kPa yollar. ROS mesajina
+    # donusurken bu yuzey referansi eklenir; navigation.py yine kendi
+    # guvenli P0 kalibrasyonunu yapar.
+    surface_reference_pa: 101325.0
+    pressure_variance_pa2: 0.0
+    pressure_min_pa: 80000.0
+    pressure_max_pa: 1700000.0
