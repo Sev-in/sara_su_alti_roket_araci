@@ -31,6 +31,9 @@ ARGUMANLAR:
                      deger, YARISMADA/SAHADA DEGISTIRILMEMELIDIR). Sadece
                      hizli iterasyon icin dusurulebilir bir launch
                      argumani olarak sunulmustur.
+    auto_start     : Ana enerjilendirmede motor-inhibit geri sayimini
+                     otomatik baslatir. Varsayilan: 'true'. 'false' verilirse
+                     /sara/mission_start/start_command beklenir.
 
 DUZELTME (v2 - kapsamli denetim): Asagidaki iki KRITIK hata bu surumde
 duzeltilmistir:
@@ -121,12 +124,20 @@ def generate_launch_description():
             "yarisma/saha kosusunda MUTLAKA varsayilan '60.0' ile birakin."
         )
     )
+    auto_start_arg = DeclareLaunchArgument(
+        'auto_start', default_value='true',
+        description=(
+            'Ana enerjilendirmede motor-inhibit geri sayimini otomatik '
+            'baslat; false ise start_command bekle'
+        )
+    )
 
     mission_id = LaunchConfiguration('mission_id')
     mode = LaunchConfiguration('mode')
     enable_telemetry = LaunchConfiguration('enable_telemetry')
     log_directory = LaunchConfiguration('log_directory')
     motor_inhibit_duration_s = LaunchConfiguration('motor_inhibit_duration_s')
+    auto_start = LaunchConfiguration('auto_start')
 
     is_test_mode = PythonExpression(["'", mode, "' == 'test'"])
     is_hardware_mode = PythonExpression(["'", mode, "' == 'hardware'"])
@@ -188,6 +199,7 @@ def generate_launch_description():
             # degerin UZERINE, launch argumaniyla (varsayilan yine 60.0)
             # yazilabiliyor - hizli test iterasyonu icin.
             {'motor_inhibit_duration_s': ParameterValue(motor_inhibit_duration_s, value_type=float)},
+            {'auto_start': ParameterValue(auto_start, value_type=bool)},
         ],
     )
 
@@ -237,6 +249,7 @@ def generate_launch_description():
         enable_telemetry_arg,
         log_directory_arg,
         motor_inhibit_arg,
+        auto_start_arg,
 
         vehicle_sim_node,
         actuator_driver_node,

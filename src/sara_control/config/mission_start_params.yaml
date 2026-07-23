@@ -6,7 +6,10 @@ mission_start_node:
     motor_inhibit_duration_s: 60.0    # GUVENLIK KURALI - sabit, sartname 4.2
     acoustic_warning_lead_s: 10.0     # rapor - Tablo 11
     publish_rate_hz: 10.0
-    auto_start: false                 # true ise start_command beklemeden otomatik baslar (SADECE TEST)
+    # Ana enerjilendirmede geri sayimi otomatik baslatir. Hareket izni yine
+    # ancak motor inhibit suresi doldugunda VE tum alt sistemler saglikliyken
+    # verilir. Gerektiginde launch'ta auto_start:=false ile manuel yapilabilir.
+    auto_start: true
     require_subsystems_healthy: true  # YENI: self-check gate - navigation/autopilot/safety
                                         # saglikli degilse 60sn dolsa bile izin verilmez
     subsystem_status_timeout_s: 2.0   # YENI: alt sistem status'unun "taze" sayilma suresi
