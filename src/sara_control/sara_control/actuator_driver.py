@@ -141,6 +141,7 @@ class ActuatorDriverNode(Node):
         self._last_pressure_time = None
         self._last_error = '-'
         self._error_count = 0
+        self._connection_count = 0
         self._motor_state = 'DISCONNECTED'
         self._arm_requested = False
         self._motor_armed = False
@@ -190,8 +191,10 @@ class ActuatorDriverNode(Node):
             self._ready_timeout_reported = False
             self._motor_state = 'WAITING_FOR_READY'
             self._last_error = '-'
+            self._connection_count += 1
             self.get_logger().info(
-                f'Uno seri baglantisi acildi: {self.port}@{self.baud}')
+                f'Uno seri baglantisi acildi: {self.port}@{self.baud} '
+                f'(baglanti #{self._connection_count})')
         except Exception as exc:
             self._disconnect(str(exc))
 
@@ -204,6 +207,9 @@ class ActuatorDriverNode(Node):
                 connection.close()
             except Exception:
                 pass
+        if connection is not None and reason != 'node kapatildi':
+            self.get_logger().error(
+                f'Uno seri baglantisi kesildi: {reason}')
         self._motor_armed = False
         self._arm_requested = False
         self._uno_ready = False
@@ -495,6 +501,9 @@ class ActuatorDriverNode(Node):
                 key='ignition_active',
                 value=str(self._ignition_active)),
             KeyValue(key='error_count', value=str(self._error_count)),
+            KeyValue(
+                key='connection_count',
+                value=str(self._connection_count)),
             KeyValue(key='last_error', value=self._last_error),
         ]
         self._status_pub.publish(status)
