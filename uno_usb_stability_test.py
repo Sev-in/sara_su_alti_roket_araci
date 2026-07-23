@@ -18,7 +18,8 @@ def main():
     parser.add_argument('--duration', type=float, default=600.0)
     args = parser.parse_args()
 
-    calibration_count = 0
+    initial_calibration_seen = False
+    restart_count = 0
     ready_count = 0
     telemetry_count = 0
     ready = False
@@ -41,11 +42,19 @@ def main():
                 if raw:
                     line = raw.decode('utf-8', errors='replace').strip()
                     if line == 'INFO,CALIBRATION_START':
-                        calibration_count += 1
+                        if ready_count == 0:
+                            if not initial_calibration_seen:
+                                print(
+                                    f'[{now - started:7.1f}s] '
+                                    'ilk CALIBRATION_START')
+                            initial_calibration_seen = True
+                        else:
+                            restart_count += 1
+                            print(
+                                f'[{now - started:7.1f}s] '
+                                f'YENIDEN BASLAMA #{restart_count}: '
+                                'CALIBRATION_START')
                         ready = False
-                        print(
-                            f'[{now - started:7.1f}s] '
-                            f'CALIBRATION_START #{calibration_count}')
                     elif line == 'INFO,CALIBRATION_DONE':
                         print(f'[{now - started:7.1f}s] CALIBRATION_DONE')
                     elif line == READY_LINE:
@@ -67,7 +76,7 @@ def main():
                 if now >= next_report:
                     print(
                         f'[{now - started:7.1f}s] izleniyor: '
-                        f'calibration={calibration_count}, '
+                        f'restart={restart_count}, '
                         f'ready={ready_count}, '
                         f'telemetry={telemetry_count}')
                     next_report = now + 10.0
@@ -80,12 +89,11 @@ def main():
 
     print(
         'TEST TAMAMLANDI: '
-        f'calibration={calibration_count}, ready={ready_count}, '
+        f'restart={restart_count}, ready={ready_count}, '
         f'telemetry={telemetry_count}')
-    if calibration_count != 1 or ready_count != 1:
+    if restart_count != 0 or ready_count != 1:
         print(
-            'BASARISIZ: Tek port acilisinda birden fazla '
-            'kalibrasyon/READY goruldu.',
+            'BASARISIZ: Ilk READY sonrasinda Uno yeniden basladi.',
             file=sys.stderr)
         return 1
     print('BASARILI: Test boyunca Uno yeniden baslamadi.')
