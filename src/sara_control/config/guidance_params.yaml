@@ -16,6 +16,7 @@ guidance_node:
     # --- Zamanlama / kararlilik ---
     kararlilik_suresi_s: 3.0          # kosul kesintisiz saglanma suresi
     max_mission_duration_s: 600.0     # fail-safe: azami gorev suresi
+    g1_max_race_duration_s: 180.0     # sartname: Asama-1 icin 3 dakika
     g2_ates_sinyali_timeout_s: 30.0   # atesleme fazina ozel, bagimsiz zaman asimi
     nav_status_timeout_s: 2.0         # fail-safe: navigasyon veri zaman asimi
     startup_grace_period_s: 5.0       # baslangicta nav fail-safe'i erken tetiklenmesin
@@ -24,7 +25,7 @@ guidance_node:
 
     # --- Faz hizlari (KTR Tablo 1 / Tablo 2 ile dogrulanan gercek degerler) ---
     max_calibrated_speed_ms: 1.076    # tam itkide (thrust=1.0) ulasilan hiz
-    g1_calib_speed_ms: 0.895          # G1_40_50M_YAVASLAMA,
+    g1_calib_speed_ms: 0.895          # G1_0_10M_KALIBRASYON, G1_40_50M_YAVASLAMA,
                                        # G1_U_DONUS, G1_KIYIYA_YAKLASMA
     g1_cruise_speed_ms: 1.076         # G1_10_40M_ANA_SEYIR, G1_GERI_DONUS_HIZLI
     # DUZELTME (KTR Tablo 1 - Gorev 2 hata duzeltmesi): KTR'de bu faza
@@ -39,7 +40,10 @@ guidance_node:
     g2_ascend_speed_ms: 0.340         # G2_TIRMANIS_35_DERECE
 
     # --- Gorev 1 (Seyir) mesafe esikleri - KTR Tablo 1 ile birebir ---
-    # Yalnizca GOREV SONU hedefidir; baslangicta 10 m kalibrasyon bacagi yoktur.
+    # Iki 10 m degeri farkli gereksinimlerdir:
+    # - ilk 10 m tamamlaninca yarisma suresi baslar,
+    # - gorev sonunda arac kiyidan 10 m uzaktaki bitis alanina doner.
+    g1_initial_timing_distance_m: 10.0
     g1_finish_distance_from_shore_m: 10.0 # kiyidan hedef bitis uzakligi
     g1_ana_seyir_distance_m: 40.0          # 10-40m ana seyir sonu
     g1_uzaklasma_min_distance_m: 50.0       # 40-50m yavaslama sonu / madde4: kiyidan en az 50m
