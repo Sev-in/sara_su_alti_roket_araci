@@ -44,8 +44,10 @@ guidance_node:
     g1_ana_seyir_distance_m: 40.0          # 10-40m ana seyir sonu
     g1_uzaklasma_min_distance_m: 50.0       # 40-50m yavaslama sonu / madde4: kiyidan en az 50m
     g1_yaklasma_baslangic_m: 15.0            # geri donus hizli seyir sonu (bitis cizgisine ~15m kala yavasla)
-    g1_bitis_cizgisi_tolerance_m: 2.0         # kiyiya yaklasma sonu / bitis cizgisine varis toleransi
-                                               # (kanitlanmis deger, PID ayarlanmadan sikilastirilmadi)
+    # Sartname: Gorev 1, kiyidan 10 m uzaktaki baslangic/bitis alaninda
+    # sonlanir. Hedef konum g1_kalibrasyon_distance_m=10.0 ile tanimlidir;
+    # bu deger hedefin etrafindaki kabul yari genisligidir (8-12 m).
+    g1_bitis_cizgisi_tolerance_m: 2.0
 
     # --- Gorev 2 (Atis) mesafe/aci esikleri ---
     g2_duz_seyir_distance_m: 30.0         # madde1: 30 m duz git (ACILI_DALIS + 30M_TAMAMLAMA_SEYIR

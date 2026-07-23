@@ -24,10 +24,11 @@ Iki AYRI gorev profili destekler (parametre ile secilir: mission_id):
       -> G1_U_DONUS                      (0.895 m/s, heading 180 derece donene kadar)
       -> G1_GERI_DONUS_HIZLI             (1.076 m/s, bitis cizgisine ~15 m kalana kadar)
       -> G1_KIYIYA_YAKLASMA              (0.895 m/s, bitis cizgisi toleransina girene kadar)
-      -> G1_BITIS_CIZGISI                (madde5: baslangic/bitis cizgisinde konum
+      -> G1_BITIS_CIZGISI                (kiyidan 10 m uzaktaki bitis alaninda konum
                                            dogrulama - kararlilik suresi kadar bekle)
-      -> G1_YUZEYE_CIKIS                 (sartname 6.2.1: pozitif sephiyeyle yuzeye cik)
-      -> G1_TAMAMLANDI                   (terminal - guvenli, sabit, yuzeyde)
+      -> G1_YUZEYE_CIKIS                 (itki kapali, pozitif sephiyeyle yuzeye cik)
+      -> G1_TAMAMLANDI                   (su sensorleri + derinlik ile yuzey
+                                           dogrulanir; ana guc kesme istenir)
 
   GOREV 2 - Atis Gorevi (mission_id=2), KTR Tablo 2 ile birebir + sartname
   duzeltmesi (asagida aciklanmistir):
@@ -269,8 +270,8 @@ class GuidanceNode(Node):
                                                                               # madde4: kiyidan en az 50m
         self.declare_parameter('g1_yaklasma_baslangic_m', 15.0)            # geri donus hizli seyir sonu
                                                                               # (bitis cizgisine ~15m kala yavasla)
-        self.declare_parameter('g1_bitis_cizgisi_tolerance_m', 2.0)         # kiyiya yaklasma sonu /
-                                                                              # bitis cizgisine varis toleransi
+        self.declare_parameter('g1_bitis_cizgisi_tolerance_m', 2.0)         # Kiyidan 10 m'deki bitis
+                                                                              # alaninin yari genisligi
                                                                               # (kanitlanmis deger, PID henuz
                                                                               # ayarlanmadan sikilastirilmadi)
 
@@ -823,7 +824,7 @@ class GuidanceNode(Node):
 
     def _run_g1_kiyiya_yaklasma(self):
         """KTR: 'Kiyiya yaklasma' fazi - kalibrasyon hizinda (0.895 m/s),
-        bitis cizgisi toleransina girene kadar."""
+        kiyidan 10 m uzaktaki bitis alanina girene kadar."""
         self._target_depth = self.dive_target_depth
         self._target_heading = self._return_heading
         self._target_pitch = 0.0
@@ -835,9 +836,11 @@ class GuidanceNode(Node):
             self._goto_phase(PHASE_G1_BITIS_CIZGISI)
 
     def _run_g1_bitis_cizgisi(self):
-        """Madde5: baslangic/bitis cizgisine geri donus TAMAMLANDI - konum
-        kararlilik suresi kadar dogrulanir (ileri hareket durur, heading
-        korunur), sonra yuzeye cikisa gecilir."""
+        """Kiyidan 10 m uzaktaki bitis alanina donus TAMAMLANDI.
+
+        Itki bu faza girer girmez kesilir. Konum kararlilik suresi kadar
+        dogrulandiktan sonra pozitif sephiye ile yuzeye cikisa gecilir.
+        """
         self._target_depth = self.dive_target_depth
         self._target_heading = self._return_heading
         self._target_pitch = 0.0
@@ -848,22 +851,40 @@ class GuidanceNode(Node):
             self._goto_phase(PHASE_G1_YUZEYE_CIKIS)
 
     def _run_g1_yuzeye_cikis(self):
-        """Sartname 6.2.1: SARA, bitis cizgisinde ENERJIYI KESEREK guvenli
-        bir sekilde, POZITIF SEPHIYE ile su ustunde kurtarilabilir bir
-        vaziyette yuzmelidir (90 puan). Bu faz, sephiye sistemi araciligiyla
-        yuzeye kontrollu cikisi temsil eder."""
+        """SARA'yi 10 m bitis alaninda kurtarilabilir duruma getir.
+
+        Ileri itki kapali tutulur. Ana guc, arac su altindayken kesilmez:
+        once basinc derinligi ve su-ustu algisi birlikte, kararlilik suresi
+        boyunca dogrulanir. Pozitif sephiye enerji kesildikten sonra da
+        mekanik olarak korunmalidir.
+        """
         self._target_depth = 0.0
         self._target_heading = self._return_heading
         self._target_pitch = 0.0
         self._forward_motion = False
         self._target_speed = 0.0
 
-        depth_ok = self._depth <= self.depth_tol
-        if self._conditions_held(depth_ok):
+        in_finish_area = (
+            self._distance_to_finish_line()
+            <= self.g1_bitis_cizgisi_tolerance
+        )
+        surface_ok = (
+            self._depth <= self.depth_tol
+            and self._surface_detected
+            and not self._nose_submerged
+            and not self._tail_submerged
+        )
+        if self._conditions_held(in_finish_area and surface_ok):
             self._goto_phase(PHASE_G1_TAMAMLANDI)
 
     def _run_g1_tamamlandi(self):
-        """Terminal - arac yuzeyde, sabit, guvenli durumda bekler.
+        """Terminal - arac kiyidan 10 m'de, yuzeyde ve kurtarilabilir.
+
+        Bu faza yalnizca konum, basinc derinligi ve iki su sensoru birlikte
+        dogrulandiktan sonra girilir. task_complete=True safety_node'a
+        iletilir; safety_node tum hareket komutlarini sifirlar ve fiziksel
+        ana guc kesme cikisini etkinlestirir.
+
         NOT: sartnamedeki 'enerjiyi keserek gorevi sonlandirma' fiziksel
         ana guc kesme islemi, GUDUM katmaninin kapsami DISINDADIR - bu,
         ayri bir donanim/guvenlik katmani (orn. MOSFET tabanli ana guc
