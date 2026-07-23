@@ -3,7 +3,9 @@ actuator_driver:
   ros__parameters:
     serial_port: '/dev/ttyUSB0'
     serial_baud: 115200
-    uno_boot_wait_s: 2.0
+    # Surucu, bu sabit sureyi beklemek yerine Uno'nun READY mesajini
+    # bekler. Bu deger yalnizca READY gelmezse tani zaman asimidir.
+    uno_ready_timeout_s: 15.0
     command_rate_hz: 20.0
     heartbeat_rate_hz: 5.0
     command_timeout_s: 0.5

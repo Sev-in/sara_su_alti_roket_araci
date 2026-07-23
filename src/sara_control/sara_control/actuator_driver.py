@@ -42,7 +42,7 @@ class ActuatorDriverNode(Node):
 
         self.declare_parameter('serial_port', '/dev/ttyUSB0')
         self.declare_parameter('serial_baud', 115200)
-        self.declare_parameter('uno_boot_wait_s', 2.0)
+        self.declare_parameter('uno_ready_timeout_s', 15.0)
         self.declare_parameter('command_rate_hz', 20.0)
         self.declare_parameter('heartbeat_rate_hz', 5.0)
         self.declare_parameter('command_timeout_s', 0.5)
@@ -64,7 +64,8 @@ class ActuatorDriverNode(Node):
 
         self.port = str(self.get_parameter('serial_port').value)
         self.baud = int(self.get_parameter('serial_baud').value)
-        self.boot_wait = float(self.get_parameter('uno_boot_wait_s').value)
+        self.ready_timeout = float(
+            self.get_parameter('uno_ready_timeout_s').value)
         self.command_timeout = float(
             self.get_parameter('command_timeout_s').value)
         self.reconnect_interval = float(
@@ -132,7 +133,9 @@ class ActuatorDriverNode(Node):
         self._serial_module = None
         self._serial = None
         self._serial_lock = threading.Lock()
-        self._serial_ready_after = math.inf
+        self._uno_ready = False
+        self._uno_ready_deadline = math.inf
+        self._ready_timeout_reported = False
         self._last_connect_attempt = 0.0
         self._last_rx_time = None
         self._last_pressure_time = None
@@ -179,8 +182,13 @@ class ActuatorDriverNode(Node):
                 self.port, self.baud, timeout=0.0)
             with self._serial_lock:
                 self._serial = connection
-            self._serial_ready_after = time.monotonic() + self.boot_wait
-            self._motor_state = 'BOOT_WAIT'
+            # Uno, seri port acilinca DTR nedeniyle yeniden baslayabilir.
+            # READY gelene kadar heartbeat/eyleyici komutu gonderilmez.
+            self._uno_ready = False
+            self._uno_ready_deadline = (
+                time.monotonic() + max(1.0, self.ready_timeout))
+            self._ready_timeout_reported = False
+            self._motor_state = 'WAITING_FOR_READY'
             self._last_error = '-'
             self.get_logger().info(
                 f'Uno seri baglantisi acildi: {self.port}@{self.baud}')
@@ -198,6 +206,9 @@ class ActuatorDriverNode(Node):
                 pass
         self._motor_armed = False
         self._arm_requested = False
+        self._uno_ready = False
+        self._uno_ready_deadline = math.inf
+        self._ready_timeout_reported = False
         self._motor_state = 'DISCONNECTED'
         self._last_error = str(reason)
         self._error_count += 1
@@ -206,7 +217,7 @@ class ActuatorDriverNode(Node):
         return (
             self._serial is not None
             and getattr(self._serial, 'is_open', False)
-            and time.monotonic() >= self._serial_ready_after
+            and self._uno_ready
         )
 
     def _write(self, command):
@@ -356,6 +367,25 @@ class ActuatorDriverNode(Node):
             self._disconnect(f'seri okuma: {exc}')
 
     def _handle_serial_line(self, line):
+        if line == 'INFO,CALIBRATION_START':
+            self._uno_ready = False
+            self._motor_state = 'CALIBRATING'
+            return
+        if line == 'INFO,CALIBRATION_DONE':
+            self._motor_state = 'WAITING_FOR_READY'
+            return
+        if line == 'READY,SARA_UNO_CONTROLLER_V2':
+            self._uno_ready = True
+            self._ready_timeout_reported = False
+            self._motor_armed = False
+            self._arm_requested = False
+            self._surface_running = False
+            self._ignition_active = False
+            self._motor_state = 'READY'
+            self._last_error = '-'
+            self.get_logger().info(
+                'Uno kalibrasyonu tamamlandi; komut iletimi etkin.')
+            return
         if line == 'OK,MOTOR_ARMED':
             self._motor_armed = True
             self._arm_requested = False
@@ -370,7 +400,9 @@ class ActuatorDriverNode(Node):
             self.get_logger().warning(line)
             return
         if line.startswith('READY,'):
-            self._motor_state = 'READY'
+            self._last_error = f'Desteklenmeyen Uno firmware surumu: {line}'
+            self._error_count += 1
+            self.get_logger().error(self._last_error)
             return
 
         values = parse_telemetry_line(line)
@@ -405,6 +437,17 @@ class ActuatorDriverNode(Node):
 
     def _reconnect_tick(self):
         if self._serial is not None:
+            if (
+                not self._uno_ready
+                and not self._ready_timeout_reported
+                and time.monotonic() >= self._uno_ready_deadline
+            ):
+                self._ready_timeout_reported = True
+                self._last_error = 'Uno READY mesaji zaman asimina ugradi'
+                self._error_count += 1
+                self.get_logger().error(
+                    'Uno READY mesaji gelmedi; guvenlik icin komut '
+                    'gonderilmiyor. Seri port acik birakildi.')
             return
         if time.monotonic() - self._last_connect_attempt >= self.reconnect_interval:
             self._connect()
