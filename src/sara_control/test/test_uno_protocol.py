@@ -22,6 +22,15 @@ class UnoProtocolTests(unittest.TestCase):
         self.assertEqual(parse_telemetry_line('OK,MOTOR_ARMED'), {})
         self.assertEqual(parse_telemetry_line('ERR,HEARTBEAT_LOST'), {})
 
+    def test_malformed_fields_are_ignored(self):
+        values = parse_telemetry_line(
+            'voltage_v=0.46,pressure_kpa=,motor_state=broken,'
+            'heartbeat_ok=1')
+        self.assertEqual(values['voltage_v'], 0.46)
+        self.assertEqual(values['heartbeat_ok'], 1.0)
+        self.assertNotIn('pressure_kpa', values)
+        self.assertNotIn('motor_state', values)
+
     def test_gauge_pressure_conversion(self):
         pressure = gauge_kpa_to_absolute_pa(9.80665, 101325.0)
         self.assertAlmostEqual(pressure, 111131.65)

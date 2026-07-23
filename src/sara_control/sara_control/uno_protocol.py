@@ -41,8 +41,8 @@ def parse_telemetry_line(line):
     """Uno'nun ``anahtar=deger`` telemetri satirini ayristir.
 
     ``INFO,``, ``OK,`` ve ``ERR,`` yanitlari telemetri degildir ve bos
-    sozluk dondurur. Bozuk tek bir alan tum satirin kaybedilmesine yol
-    acmaz; alan ham metin olarak korunur.
+    sozluk dondurur. Bos veya sayisal olmayan alanlar yok sayilir; bozuk
+    tek bir alan tum telemetri satirinin kaybedilmesine yol acmaz.
     """
     text = str(line).strip()
     if not text or text.startswith(('INFO,', 'OK,', 'ERR,', 'READY,')):
@@ -55,12 +55,12 @@ def parse_telemetry_line(line):
         key, raw_value = item.split('=', 1)
         key = key.strip()
         raw_value = raw_value.strip()
-        if not key:
+        if not key or not raw_value:
             continue
         try:
             values[key] = float(raw_value)
         except ValueError:
-            values[key] = raw_value
+            continue
     return values
 
 

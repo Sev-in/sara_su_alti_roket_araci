@@ -133,6 +133,7 @@ class ActuatorDriverNode(Node):
         self._serial_module = None
         self._serial = None
         self._serial_lock = threading.Lock()
+        self._rx_buffer = bytearray()
         self._uno_ready = False
         self._uno_ready_deadline = math.inf
         self._ready_timeout_reported = False
@@ -183,6 +184,7 @@ class ActuatorDriverNode(Node):
                 self.port, self.baud, timeout=0.0)
             with self._serial_lock:
                 self._serial = connection
+                self._rx_buffer.clear()
             # Uno, seri port acilinca DTR nedeniyle yeniden baslayabilir.
             # READY gelene kadar heartbeat/eyleyici komutu gonderilmez.
             self._uno_ready = False
@@ -202,6 +204,7 @@ class ActuatorDriverNode(Node):
         with self._serial_lock:
             connection = self._serial
             self._serial = None
+            self._rx_buffer.clear()
         if connection is not None:
             try:
                 connection.close()
@@ -356,21 +359,43 @@ class ActuatorDriverNode(Node):
         if self._serial is None:
             return
         try:
-            while True:
-                with self._serial_lock:
-                    if (
-                        self._serial is None
-                        or self._serial.in_waiting <= 0
-                    ):
-                        break
-                    raw = self._serial.readline()
-                line = raw.decode('utf-8', errors='replace').strip()
-                if not line:
-                    continue
-                self._last_rx_time = self.get_clock().now()
-                self._handle_serial_line(line)
+            with self._serial_lock:
+                if self._serial is None:
+                    return
+                waiting = self._serial.in_waiting
+                if waiting <= 0:
+                    return
+                self._rx_buffer.extend(self._serial.read(waiting))
         except Exception as exc:
             self._disconnect(f'seri okuma: {exc}')
+            return
+
+        # timeout=0 olan seri portta readline(), satirin tamami gelmeden
+        # parcali veri dondurebilir. Yalnizca '\\n' ile tamamlanmis satirlar
+        # ayrisir; eksik parca bir sonraki timer turuna saklanir.
+        while b'\n' in self._rx_buffer:
+            raw, _, remainder = self._rx_buffer.partition(b'\n')
+            self._rx_buffer = bytearray(remainder)
+            line = raw.rstrip(b'\r').decode(
+                'utf-8', errors='replace').strip()
+            if not line:
+                continue
+            self._last_rx_time = self.get_clock().now()
+            try:
+                self._handle_serial_line(line)
+            except Exception as exc:
+                # Bozuk tek bir telemetri satiri USB kopmasi degildir.
+                # Portu kapatmak DTR ile Uno'yu resetleyecegi icin satir
+                # reddedilir, baglanti acik tutulur.
+                self._last_error = f'Bozuk Uno telemetrisi: {exc}'
+                self._error_count += 1
+                self.get_logger().warning(self._last_error)
+
+        if len(self._rx_buffer) > 4096:
+            self._rx_buffer.clear()
+            self._last_error = 'Uno seri satiri 4096 bayti asti'
+            self._error_count += 1
+            self.get_logger().warning(self._last_error)
 
     def _handle_serial_line(self, line):
         if line == 'INFO,CALIBRATION_START':
@@ -415,7 +440,10 @@ class ActuatorDriverNode(Node):
         if not values:
             return
         if 'motor_state' in values:
-            self._motor_state = str(int(values['motor_state']))
+            try:
+                self._motor_state = str(int(values['motor_state']))
+            except (TypeError, ValueError, OverflowError):
+                pass
         if 'pressure_kpa' not in values:
             return
         try:
