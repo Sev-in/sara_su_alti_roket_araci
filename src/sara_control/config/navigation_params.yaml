@@ -1,0 +1,77 @@
+# navigation_params.yaml
+# SARA platformu - Navigasyon Katmani parametreleri
+# Kullanim: launch dosyasinda Node(..., parameters=[<bu_dosyanin_yolu>]) ile eklenir.
+
+navigation_node:
+  ros__parameters:
+    # --- Fiziksel sabitler ---
+    rho: 1000.0                    # su yogunlugu [kg/m^3] - havuz: ~997-1000, deniz: ~1025
+    g: 9.80665                     # yercekimi ivmesi [m/s^2]
+
+    # --- Basinc kalibrasyonu ---
+    pressure_calib_samples: 50     # yuzeyde P0 icin ortalama ornek sayisi
+    # Mevcut alpha korunur; kod gercek mesaj dt'sinden esit zaman sabitli
+    # alpha hesaplar. Boylece ornekleme araligi degisse de filtre karakteri
+    # degismez.
+    lpf_alpha_pressure: 0.2
+    pressure_calibration_stable_s: 1.0
+    pressure_calibration_max_span_pa: 1000.0
+    pressure_calibration_min_valid_ratio: 0.8
+    require_water_dry_for_calibration: true
+    require_imu_still_for_calibration: true
+
+    # --- SEN0257 / basinc veri gecerliligi ---
+    # sensor_get_data / basinc surucusu /sara/pressure topic'ine Pa
+    # cinsinden deger vermelidir. Kullanilan SEN0257: 0--1.6 MPa.
+    # Kucuk negatif alt pay, SEN0257 sifir ofsetinin nominal 0.5 V'un
+    # altinda kalabilmesine izin verir; P0 kalibrasyonu bunu sifirlar.
+    pressure_min_pa: -100000.0
+    pressure_max_pa: 1650000.0
+    pressure_hampel_window: 7
+    pressure_hampel_sigma: 3.0
+    # Monoton gercek dalis hareketini aykiri saymayacak koruyucu alt esik.
+    # Havuz loglarina gore iyilestirilmelidir.
+    pressure_hampel_min_deviation_pa: 2000.0
+    pressure_max_rate_pa_s: 50000.0
+    pressure_jump_floor_pa: 2000.0
+
+    # Basinctan dikey hiz: son 0.5 s orneklerine zaman-damgali dogru uydurur,
+    # ardindan hafif LPF uygular.
+    depth_rate_window_s: 0.5
+    depth_rate_lpf_alpha: 0.3
+    max_vertical_speed_ms: 2.0
+
+    # --- IMU filtreleme ---
+    imu_gyro_window: 5             # acisal hiz hareketli ortalama pencere boyu
+    imu_topic: '/sara/imu/data'    # sensor_get_data.py / vehicle_sim.py ile AYNI olmali
+    gyro_still_threshold: 0.15     # kalibrasyon kapisi icin [rad/s]
+    imu_min_quaternion_norm: 0.5
+    imu_max_quaternion_norm: 1.5
+    imu_max_accel_ms2: 100.0
+    imu_max_gyro_rads: 10.0
+
+    # --- Yaklasik ilerleme (dead-reckoning, GPS/DVL yok) ---
+    # DUZELTME: artik SABIT v_kalibre ile DEGIL, GERCEK itki seviyesiyle
+    # ORANTILI hesaplaniyor (hiz_tahmini = thrust_command * max_calibrated_speed_ms).
+    # KTR'deki ana seyir hizi 1.076 m/s (gorsel tablodan dogrulandi -
+    # onceki "3.076" degeri yanlis bir elle-okuma hatasiydi, duzeltildi).
+    max_calibrated_speed_ms: 1.076  # tam itkide (thrust=1.0) ulasilan hiz - KTR ana seyir hizi
+    v_kalibre: 0.9                   # ARTIK SADECE yedek/eski-uyumluluk degeri (kullanilmiyor)
+    enable_xy_estimate: true
+
+    # --- Baglanti/veri zaman asimlari ---
+    pixhawk_timeout_sec: 1.0
+    pressure_timeout_sec: 2.0
+    water_sensor_timeout_sec: 2.0
+    publish_rate_hz: 20.0
+
+    # --- Su sensoru fuzyonu ---
+    water_fusion_mode: 'or'        # 'or' (temkinli) veya 'and'
+    water_debounce_s: 0.3          # dijital titreme/yalanci gecis engeli
+
+    # --- Hareket tutarliligi esikleri (lab/su ici testlerle iyilestirilecek) ---
+    accel_still_threshold: 0.6
+    gyro_consistent_threshold: 2.0
+
+    # --- Yaklasik ilerleme icin itki esigi ---
+    thrust_active_threshold: 0.05  # bu esigin altinda itki "yok" sayilir

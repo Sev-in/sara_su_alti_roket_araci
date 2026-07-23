@@ -1,0 +1,38 @@
+# SARA gercek donanim sensor veri alma katmani.
+# Jetson uzerindeki gercek kablolamaya gore I2C bus ve GPIO pinlerini
+# sahada `i2cdetect` / Jetson pinout ile dogrulayin.
+
+sensor_data_node:
+  ros__parameters:
+    publish_rate_hz: 20.0
+
+    # Pixhawk/MAVROS IMU koprusu
+    imu_bridge_enabled: true
+    mavros_imu_topic: '/mavros/imu/data'
+
+    # ADS1115 + SEN0257 (0--1.6 MPa, nominal 0.5--4.5 V)
+    pressure_enabled: true
+    i2c_bus: 7
+    ads1115_address: 72          # 0x48
+    ads1115_channel: 0
+    ads1115_gain: 1.0
+    sen0257_zero_offset_v: 0.5   # yuksuz olcumle iyilestirin
+    sen0257_output_span_v: 4.0
+    sen0257_full_scale_pa: 1600000.0
+
+    # R1: sensor cikisi -> ADC dugumu, R2: ADC dugumu -> GND
+    voltage_divider_r1_ohm: 10000.0
+    voltage_divider_r2_ohm: 20000.0
+    sensor_voltage_min_v: 0.3
+    sensor_voltage_max_v: 4.7
+    # Bu alan sensor dogrulugu degil, kisa-sureli olcum gurultusu
+    # varyansidir. Olcum yapilmadan uydurulmadigi icin 0=bilinmiyor.
+    pressure_variance_pa2: 0.0
+
+    # SEN0368 x2 - Jetson fiziksel BOARD pinleri
+    water_sensors_enabled: true
+    gpio_numbering_mode: 'BOARD'
+    water_sensor_1_pin: 15       # burun
+    water_sensor_2_pin: 16       # kuyruk
+    water_sensor_1_active_high: true
+    water_sensor_2_active_high: true
