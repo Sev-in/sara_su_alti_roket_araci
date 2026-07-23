@@ -27,7 +27,7 @@ Iki AYRI gorev profili destekler (parametre ile secilir: mission_id):
       -> G1_BITIS_CIZGISI                (kiyidan 10 m uzaktaki bitis alaninda konum
                                            dogrulama - kararlilik suresi kadar bekle)
       -> G1_YUZEYE_CIKIS                 (itki kapali, pozitif sephiyeyle yuzeye cik)
-      -> G1_TAMAMLANDI                   (su sensorleri + derinlik ile yuzey
+      -> G1_TAMAMLANDI                   (basinc derinligi ile yuzey
                                            dogrulanir; ana guc kesme istenir)
 
   GOREV 2 - Atis Gorevi (mission_id=2), KTR Tablo 2 ile birebir + sartname
@@ -854,9 +854,11 @@ class GuidanceNode(Node):
         """SARA'yi 10 m bitis alaninda kurtarilabilir duruma getir.
 
         Ileri itki kapali tutulur. Ana guc, arac su altindayken kesilmez:
-        once basinc derinligi ve su-ustu algisi birlikte, kararlilik suresi
-        boyunca dogrulanir. Pozitif sephiye enerji kesildikten sonra da
-        mekanik olarak korunmalidir.
+        once basinc derinligi kararlilik suresi boyunca dogrulanir. Gorev
+        1'de arac yatay yuzdugu ve iki su sensoru da suya temas edebildigi
+        icin bu sensorler terminal kosulu yapilmaz. Burun/kuyruk su sensoru
+        geometrisi yalnizca Gorev 2 atesleme kontrolunde kullanilir.
+        Pozitif sephiye enerji kesildikten sonra da mekanik korunmalidir.
         """
         self._target_depth = 0.0
         self._target_heading = self._return_heading
@@ -868,22 +870,18 @@ class GuidanceNode(Node):
             self._distance_to_finish_line()
             <= self.g1_bitis_cizgisi_tolerance
         )
-        surface_ok = (
-            self._depth <= self.depth_tol
-            and self._surface_detected
-            and not self._nose_submerged
-            and not self._tail_submerged
-        )
+        surface_ok = self._depth <= self.depth_tol
         if self._conditions_held(in_finish_area and surface_ok):
             self._goto_phase(PHASE_G1_TAMAMLANDI)
 
     def _run_g1_tamamlandi(self):
         """Terminal - arac kiyidan 10 m'de, yuzeyde ve kurtarilabilir.
 
-        Bu faza yalnizca konum, basinc derinligi ve iki su sensoru birlikte
-        dogrulandiktan sonra girilir. task_complete=True safety_node'a
-        iletilir; safety_node tum hareket komutlarini sifirlar ve fiziksel
-        ana guc kesme cikisini etkinlestirir.
+        Bu faza konum ve basinc derinligi kararlilik suresi boyunca
+        dogrulandiktan sonra girilir. Su sensorleri Gorev 1 icin kuru olmak
+        zorunda degildir. task_complete=True safety_node'a iletilir;
+        safety_node tum hareket komutlarini sifirlar ve fiziksel ana guc
+        kesme cikisini etkinlestirir.
 
         NOT: sartnamedeki 'enerjiyi keserek gorevi sonlandirma' fiziksel
         ana guc kesme islemi, GUDUM katmaninin kapsami DISINDADIR - bu,
