@@ -9,6 +9,7 @@ targets and a limited test speed through the normal chain:
 Nose-cap, buoyancy and launch requests are always kept disabled.
 """
 
+from diagnostic_msgs.msg import DiagnosticStatus
 from geometry_msgs.msg import PoseStamped
 from nav_msgs.msg import Odometry
 import rclpy
@@ -43,11 +44,18 @@ class ImuActuatorBench(Node):
         )
 
         self._reference_pose = None
+        self._navigation_ready = False
 
         self.create_subscription(
             Odometry,
             '/sara/navigation/odom',
             self._on_odom,
+            10,
+        )
+        self.create_subscription(
+            DiagnosticStatus,
+            '/sara/navigation/status',
+            self._on_navigation_status,
             10,
         )
 
@@ -85,8 +93,16 @@ class ImuActuatorBench(Node):
             self.get_logger().info(
                 'Pixhawk/PID servo bench testi etkin; motor devre disi.')
 
+    def _on_navigation_status(self, msg: DiagnosticStatus):
+        values = {item.key: item.value for item in msg.values}
+        self._navigation_ready = (
+            msg.level == DiagnosticStatus.OK
+            and values.get('pixhawk_connected', 'False') == 'True'
+            and values.get('depth_valid', 'False') == 'True'
+        )
+
     def _on_odom(self, msg: Odometry):
-        if self._reference_pose is not None:
+        if self._reference_pose is not None or not self._navigation_ready:
             return
 
         target = PoseStamped()
