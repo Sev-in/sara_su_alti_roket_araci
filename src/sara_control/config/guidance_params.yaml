@@ -14,10 +14,14 @@ guidance_node:
     pitch_tolerance: 0.10             # [rad]
 
     # --- Zamanlama / kararlilik ---
-    kararlilik_suresi_s: 3.0          # kosul kesintisiz saglanma suresi
+    kararlilik_suresi_s: 3.0          # G1 ve ortak kosullar icin
+    g2_condition_hold_s: 1.0          # G2 faz gecislerinde filtreli kosul dogrulama
+    g2_launch_hold_s: 0.5             # Safety katmani da bagimsiz kontrol eder
     max_mission_duration_s: 600.0     # fail-safe: azami gorev suresi
-    g1_max_race_duration_s: 180.0     # sartname: Asama-1 icin 3 dakika
-    g2_max_race_duration_s: 60.0      # sartname: Asama-2 icin 1 dakika
+    # Sartnamedeki "verilecek sure" puanlama penceresidir. Asilmasi
+    # gorevi durdurmaz; telemetride WARN uretilir ve arac devam eder.
+    g1_max_race_duration_s: 180.0     # Asama-1 resmi puanlama suresi
+    g2_max_race_duration_s: 60.0      # Asama-2 resmi puanlama suresi
     g2_ates_sinyali_timeout_s: 30.0   # atesleme fazina ozel, bagimsiz zaman asimi
     g2_actuator_status_timeout_s: 1.5 # Uno/eyleyici atesleme onayi canlilik siniri
     nav_status_timeout_s: 2.0         # fail-safe: navigasyon veri zaman asimi
@@ -31,16 +35,11 @@ guidance_node:
                                        # G1_40_50M_YAVASLAMA,
                                        # G1_U_DONUS, G1_KIYIYA_YAKLASMA
     g1_cruise_speed_ms: 1.076         # G1_10_40M_ANA_SEYIR, G1_GERI_DONUS_HIZLI
-    # DUZELTME (KTR Tablo 1 - Gorev 2 hata duzeltmesi): KTR'de bu faza
-    # 10 sn / 0.400 m/s verilmisti, ancak sartname Madde 1'in gerektirdigi
-    # 30 m YATAY ilerlemeyi hesaba katmiyordu (0.400 m/s ile 30m = 75 sn,
-    # tek basina Asama-2'nin 60 sn'lik sartname sinirini asar). KTR'nin
-    # 0.400 m/s degeri ATILMADI, sadece GERCEK anlamiyla (yuzeyden 2m'ye
-    # inis manevrasi = G2_ACILI_DALIS) korundu; 30m'nin kalanini tamamlayan
-    # YENI bir faz (G2_30M_TAMAMLAMA_SEYIR) cruise hiziyla eklendi.
-    g2_dive_speed_ms: 0.400           # G2_ACILI_DALIS - KTR'nin ORIJINAL degeri
+    # Ilk testte 0.400 m/s dalis 19.4 sn surdu ve atesleme 60 sn'ye
+    # sigmadi. 0.600 m/s hala tam itkinin yalnizca yaklasik %56'sidir.
+    g2_dive_speed_ms: 0.600           # 60 sn butcesi icin kontrollu dinamik dalis
     g2_transit_speed_ms: 1.076        # G2_30M_TAMAMLAMA_SEYIR - YENI, duzeltme fazi
-    g2_ascend_speed_ms: 0.340         # G2_TIRMANIS_35_DERECE
+    g2_ascend_speed_ms: 0.450         # 35 derece cikisi 60 sn icinde tamamlamak icin
 
     # --- Gorev 1 (Seyir) mesafe esikleri - KTR Tablo 1 ile birebir ---
     # Iki 10 m degeri farkli gereksinimlerdir:

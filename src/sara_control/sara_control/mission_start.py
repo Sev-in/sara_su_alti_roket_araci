@@ -251,12 +251,15 @@ class MissionStartNode(Node):
                     self._state = STATE_PERMITTED
                     self._acoustic_warning = False
                     self._motion_permission = True
-                    self.get_logger().info('60 sn motor inhibit tamamlandi - hareket baslatma izni VERILDI.')
+                    self.get_logger().info(
+                        f'{self.motor_inhibit_duration:.0f} sn motor inhibit '
+                        'tamamlandi - hareket baslatma izni VERILDI.')
                 else:
                     self._acoustic_warning = False
                     self._motion_permission = False
                     self.get_logger().warn(
-                        f'60 sn tamamlandi AMA alt sistemler hazir degil, izin VERILMEDI: '
+                        f'{self.motor_inhibit_duration:.0f} sn tamamlandi '
+                        f'AMA alt sistemler hazir degil, izin VERILMEDI: '
                         f'{", ".join(problems)}',
                         throttle_duration_sec=5.0,
                     )

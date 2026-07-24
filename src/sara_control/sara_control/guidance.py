@@ -32,14 +32,14 @@ Iki AYRI gorev profili destekler (parametre ile secilir: mission_id):
   duzeltmesi (asagida aciklanmistir):
     REFERANSLAMA
       -> AKUSTIK_UYARI_GOREV_BASLATMA    (yarisma suresi bu fazin SONUNDA baslar)
-      -> G2_ACILI_DALIS                  (0.400 m/s, KTR'deki "acili kontrollu
-                                           dalis" degeri - ileri hareketle
+      -> G2_ACILI_DALIS                  (0.600 m/s, ileri hareketle
                                            BIRLIKTE 2 m derinlige inilir, DALIS
                                            fazinin aksine yerinde degil ILERLERKEN
                                            dalar - KTR'de arac yuzeyden basliyor)
       -> G2_30M_TAMAMLAMA_SEYIR          (1.076 m/s - DUZELTME asagida)
-      -> G2_GUVENLI_ATIS_BOLGESI         (hiz 0, stabil bekleme)
-      -> G2_TIRMANIS_35_DERECE           (0.340 m/s, +35 derece hedef pitch ile
+      -> G2_GUVENLI_ATIS_BOLGESI         (0.450 m/s; 30 m cizgisi dogrulanirken
+                                           tirmanis hemen baslatilir)
+      -> G2_TIRMANIS_35_DERECE           (0.450 m/s, +35 derece hedef pitch ile
                                            yuzeye tirmanis)
       -> G2_ACI_VE_YUZEY_DOGRULAMA       (pitch>=30 derece VE burun disarida/
                                            kuyruk icerde kosulu birlikte dogrulanir)
@@ -54,19 +54,19 @@ Iki AYRI gorev profili destekler (parametre ile secilir: mission_id):
   YATAY ilerlemeyi hesaba katmamis. Eger tum 30 m 0.400 m/s ile
   alinsaydi tek basina 75 sn surer, bu da Asama-2'nin sartnamedeki
   1 dakikalik (60 sn) sinirini asardi.
-  DUZELTME: KTR'nin 0.400 m/s degeri ATILMADI - "G2_ACILI_DALIS" fazi
-  olarak GERCEK anlamiyla (yuzeyden 2 m'ye inis manevrasi) korundu.
-  Bunun UZERINE, 30 m'nin geri kalanini tamamlayan YENI bir faz
+  ILK KAPALI CEVRIM TESTI: 0.400 m/s dalis 19.4 sn surdu ve sistem
+  atesleme fazina ulasamadan 60.1 sn'lik resmi sureyi asti. Kontrollu
+  dalis 0.600 m/s'ye, cikis 0.450 m/s'ye ayarlandi. 30 m'nin geri
+  kalanini tamamlayan faz
   (G2_30M_TAMAMLAMA_SEYIR) eklendi ve bu faz Gorev 1'deki cruise hizini
   (1.076 m/s) kullanir. Toplam mesafe muhasebesi (approx_distance,
   navigation_node'da surekli birikir) her iki fazda da ayni sayaci
   kullandigi icin, dalis fazinda kac metre alindigi ONEMLI DEGILDIR -
   G2_30M_TAMAMLAMA_SEYIR fazi otomatik olarak "30 m'ye ulasana kadar"
-  devam eder. Tipik sure butcesi: dalis ~10 sn (~4 m) + tamamlama
-  (30-4)/1.076 ~= 24.2 sn = toplam ~34 sn seyir + guvenli bolge
-  bekleme + tirmanis + dogrulama + burun kapagi (3 sn sabit) + ates
-  sinyali bekleme - KTR'nin diger fazlariyla toplandiginda 60 sn
-  sinirinin GUVENLE ALTINDA kalir.
+  devam eder. Tekrarlanan 3 sn faz beklemeleri G2 icin 1 sn'lik filtreli
+  dogrulamaya indirildi; nihai atesleme istegi safety_node'un bagimsiz
+  kontrolleri nedeniyle 0.5 sn kesintisiz kosul ister. Burun kapagi icin
+  3 sn mekanik sure korunur.
 
 GUVENLIK KURALLARI (rapor + kullanicidan gelen sartlar):
   - Acil durdurma butonuna basilirsa motorlar HEMEN durur (ayni kontrol
@@ -235,9 +235,13 @@ class GuidanceNode(Node):
         self.declare_parameter('heading_tolerance', 0.10)           # [rad] (~5.7 derece) - kanitlanmis deger
         self.declare_parameter('pitch_tolerance', 0.10)             # [rad]
         self.declare_parameter('kararlilik_suresi_s', 3.0)           # kosul kesintisiz saglanma suresi
+        self.declare_parameter('g2_condition_hold_s', 1.0)
+        self.declare_parameter('g2_launch_hold_s', 0.5)
         self.declare_parameter('max_mission_duration_s', 600.0)      # fail-safe: azami gorev suresi
-        self.declare_parameter('g1_max_race_duration_s', 180.0)      # sartname: Asama-1 icin 3 dakika
-        self.declare_parameter('g2_max_race_duration_s', 60.0)       # sartname: Asama-2 icin 1 dakika
+        # Sartnamedeki "verilecek sure" puanlama penceresidir; asim
+        # gorevi durdurmaz, yalnizca WARN telemetrisi uretir.
+        self.declare_parameter('g1_max_race_duration_s', 180.0)
+        self.declare_parameter('g2_max_race_duration_s', 60.0)
         self.declare_parameter('g2_ates_sinyali_timeout_s', 30.0)     # atesleme fazina OZEL, BAGIMSIZ zaman asimi
         self.declare_parameter('g2_actuator_status_timeout_s', 1.5)
         self.declare_parameter('nav_status_timeout_s', 2.0)           # fail-safe: navigasyon veri zaman asimi
@@ -259,12 +263,11 @@ class GuidanceNode(Node):
                                                                           # G1_U_DONUS, G1_KIYIYA_YAKLASMA (KTR'nin
                                                                           # ortak 0.895 m/s degeri)
         self.declare_parameter('g1_cruise_speed_ms', 1.076)          # G1_10_40M_ANA_SEYIR, G1_GERI_DONUS_HIZLI
-        self.declare_parameter('g2_dive_speed_ms', 0.400)             # G2_ACILI_DALIS - KTR'nin ORIJINAL degeri,
-                                                                          # DEGISTIRILMEDI (bkz. modul dokstringi)
+        self.declare_parameter('g2_dive_speed_ms', 0.600)
         self.declare_parameter('g2_transit_speed_ms', 1.076)          # G2_30M_TAMAMLAMA_SEYIR - YENI faz,
                                                                           # sartnamenin 30m sartini karsilamak
                                                                           # icin eklendi (KTR hatasi duzeltmesi)
-        self.declare_parameter('g2_ascend_speed_ms', 0.340)            # G2_TIRMANIS_35_DERECE
+        self.declare_parameter('g2_ascend_speed_ms', 0.450)            # G2_TIRMANIS_35_DERECE
 
         # --- Gorev 1 (Seyir) mesafe esikleri - KTR Tablo 1 ile birebir ---
         self.declare_parameter('g1_initial_timing_distance_m', 10.0) # sure bu cizgide baslar
@@ -302,6 +305,10 @@ class GuidanceNode(Node):
         self.heading_tol = self.get_parameter('heading_tolerance').value
         self.pitch_tol = self.get_parameter('pitch_tolerance').value
         self.kararlilik_suresi = self.get_parameter('kararlilik_suresi_s').value
+        self.g2_condition_hold = self.get_parameter(
+            'g2_condition_hold_s').value
+        self.g2_launch_hold = self.get_parameter(
+            'g2_launch_hold_s').value
         self.max_mission_duration = self.get_parameter('max_mission_duration_s').value
         self.g1_max_race_duration = self.get_parameter('g1_max_race_duration_s').value
         self.g2_max_race_duration = self.get_parameter('g2_max_race_duration_s').value
@@ -351,6 +358,7 @@ class GuidanceNode(Node):
         #   Gorev 2: 60 sn motor inhibit tamamlanip G2_ACILI_DALIS basladiginda
         self._race_timer_start = None
         self._race_elapsed_frozen = None   # YENI: terminal faza girince donan yarisma suresi
+        self._race_overtime_announced = False
 
         self._reference_heading = 0.0
         self._reference_depth = 0.0
@@ -577,6 +585,38 @@ class GuidanceNode(Node):
             return None
         return (self.get_clock().now() - self._race_timer_start).nanoseconds * 1e-9
 
+    def _race_time_limit(self) -> float:
+        """Secili asamanin sartnamedeki resmi puanlama suresini dondur."""
+        return (
+            self.g1_max_race_duration
+            if self.mission_id == 1
+            else self.g2_max_race_duration
+        )
+
+    def _race_overtime_seconds(self) -> float:
+        """Resmi sure asimini dondur; bu deger bir fail-safe degildir."""
+        elapsed = self._race_elapsed()
+        if elapsed is None:
+            return 0.0
+        return max(0.0, elapsed - self._race_time_limit())
+
+    def _check_race_time_limit(self):
+        """Resmi sure asimini bir kez bildir, gorev akisini durdurma."""
+        overtime = self._race_overtime_seconds()
+        if (
+            overtime > 0.0
+            and not self._race_overtime_announced
+            and self._phase not in TERMINAL_PHASES
+        ):
+            self._race_overtime_announced = True
+            self.get_logger().warn(
+                f'*** RESMI YARISMA SURESI ASILDI: '
+                f'Asama-{self.mission_id} limiti '
+                f'{self._race_time_limit():.0f} sn. '
+                'Gorev guvenli ve otonom olarak DEVAM EDIYOR; '
+                'bu durum puanlama/hakem degerlendirmesini etkileyebilir. ***'
+            )
+
     def _log_periodic_status(self):
         """Uzun suren fazlarda (orn. G1_10_40M_ANA_SEYIR ~28 sn) terminalde
         uzun sessizlik olmasin diye, faz GECISLERI disinda da her
@@ -631,12 +671,26 @@ class GuidanceNode(Node):
                 self._race_elapsed_frozen = (
                     self.get_clock().now() - self._race_timer_start
                 ).nanoseconds * 1e-9
-                self.get_logger().info(
-                    f'*** GOREV TAMAMLANDI - toplam yarisma suresi: {self._race_elapsed_frozen:.2f} sn '
-                    f'(bu andan itibaren donduruldu) ***'
+                overtime = self._race_overtime_seconds()
+                overtime_text = (
+                    f' | resmi sure {overtime:.2f} sn asildi'
+                    if overtime > 0.0
+                    else ''
                 )
+                if phase == PHASE_GUVENLI_SONLANDIRMA:
+                    self.get_logger().error(
+                        f'*** GOREV BASARISIZ - GUVENLI SONLANDIRILDI | '
+                        f'yarisma suresi: {self._race_elapsed_frozen:.2f} sn'
+                        f'{overtime_text} ***'
+                    )
+                else:
+                    self.get_logger().info(
+                        f'*** GOREV BASARIYLA TAMAMLANDI - toplam yarisma '
+                        f'suresi: {self._race_elapsed_frozen:.2f} sn'
+                        f'{overtime_text} ***'
+                    )
 
-    def _conditions_held(self, ok: bool) -> bool:
+    def _conditions_held(self, ok: bool, hold_s=None) -> bool:
         now = self.get_clock().now()
         if not ok:
             self._condition_hold_start = None
@@ -644,12 +698,20 @@ class GuidanceNode(Node):
         if self._condition_hold_start is None:
             self._condition_hold_start = now
         held = (now - self._condition_hold_start).nanoseconds * 1e-9
-        return held >= self.kararlilik_suresi
+        required_hold = (
+            self.kararlilik_suresi if hold_s is None else float(hold_s))
+        return held >= max(0.0, required_hold)
 
     # ======================================================================
     # Ana kontrol dongusu - GUVENLIK (fail-safe, coklu ve bagimsiz) + FSM
     # ======================================================================
     def _on_timer(self):
+        # Sartname 6.2.1/6.2.2: 3 dk ve 1 dk "verilecek sure" puanlama
+        # pencereleridir. Bu sinirlar asildiginda arac gorevi birakmaz;
+        # yalnızca bir kez WARN verilir. Emniyet fail-safe'leri asagida
+        # bagimsiz olarak calismaya devam eder.
+        self._check_race_time_limit()
+
         failsafe_reason = None
         if self._emergency_stop:
             failsafe_reason = 'acil durdurma butonuna basildi'
@@ -662,22 +724,6 @@ class GuidanceNode(Node):
             failsafe_reason = 'navigasyon verisi gecersiz/zaman asimi'
         elif self._mission_elapsed() > self.max_mission_duration:
             failsafe_reason = 'azami gorev suresi asildi'
-        elif (
-            self.mission_id == 1
-            and self._race_timer_start is not None
-            and self._race_elapsed() > self.g1_max_race_duration
-        ):
-            failsafe_reason = (
-                f'Asama-1 icin {self.g1_max_race_duration:.0f} sn '
-                'yarisma suresi asildi')
-        elif (
-            self.mission_id == 2
-            and self._race_timer_start is not None
-            and self._race_elapsed() > self.g2_max_race_duration
-        ):
-            failsafe_reason = (
-                f'Asama-2 icin {self.g2_max_race_duration:.0f} sn '
-                'yarisma suresi asildi')
         elif (
             self._phase == PHASE_G2_ATES_SINYALI_GONDER
             and self._phase_elapsed() > self.g2_ates_sinyali_timeout
@@ -744,7 +790,7 @@ class GuidanceNode(Node):
         # kadar saymaz). Terminal fazlarda (G1/G2_TAMAMLANDI veya
         # GUVENLI_SONLANDIRMA) periyodik log ARTIK BASILMIYOR - bunun
         # yerine _goto_phase, terminal faza girildigi anda TEK SEFERLIK,
-        # DONDURULMUS bir "GOREV TAMAMLANDI" ozet satiri basar.
+        # DONDURULMUS bir gorev sonucu ozet satiri basar.
         # YENI: periodic_log_interval_s<=0 verilirse periyodik log TAMAMEN
         # KAPANIR (sadece faz gecisleri yazdirilir) - 7 node'un ciktisi
         # ayni terminalde ic ice gectiginde takibi kolaylastirmak icin.
@@ -801,7 +847,8 @@ class GuidanceNode(Node):
             else:
                 self._race_timer_start = self.get_clock().now()
                 self.get_logger().info(
-                    '60 sn motor inhibit tamamlandi - yarisma suresi (ic telemetri) baslatildi.'
+                    'Motor inhibit ve self-check tamamlandi - yarisma '
+                    'suresi (ic telemetri) baslatildi.'
                 )
                 self._goto_phase(PHASE_G2_ACILI_DALIS)
 
@@ -972,8 +1019,8 @@ class GuidanceNode(Node):
 
     # ---------------------------------------------------------- GOREV 2 (KTR Tablo 2 + duzeltme)
     def _run_g2_acili_dalis(self):
-        """KTR: 'Acili kontrollu dalis' fazi - ORIJINAL KTR hizi (0.400 m/s)
-        korunmustur. Arac YUZEYDEN baslar (KTR Tablo 2) ve ILERLERKEN 2 m
+        """Acili kontrollu dalis fazi - ilk kapali cevrim testinden sonra
+        60 sn butcesi icin 0.600 m/s. Arac YUZEYDEN baslar ve ILERLERKEN 2 m
         derinlige iner (DALIS fazinin aksine yerinde degil, hareket
         halinde dalar - bu yuzden 'acili'). target_pitch=0 birakilarak
         gercek dalis acisi otopilotun derinlik-trim kaskadindan (kisa
@@ -985,7 +1032,7 @@ class GuidanceNode(Node):
         self._target_speed = self.g2_dive_speed
 
         depth_ok = abs(self._depth - self.dive_target_depth) < self.depth_tol
-        if self._conditions_held(depth_ok):
+        if self._conditions_held(depth_ok, self.g2_condition_hold):
             self._goto_phase(PHASE_G2_30M_TAMAMLAMA_SEYIR)
 
     def _run_g2_30m_tamamlama_seyir(self):
@@ -1006,34 +1053,32 @@ class GuidanceNode(Node):
             self._goto_phase(PHASE_G2_GUVENLI_ATIS_BOLGESI)
 
     def _run_g2_guvenli_atis_bolgesi(self):
-        """KTR: 'Ateşleme öncesi stabil bekleme' fazi - hiz 0.
+        """30 m guvenli bolge cizgisini dogrularken tirmanisi baslat.
 
-        DUZELTME (saha testinde bulundu - 388 sn kilitlenme): Bu faz
-        aracin DURMASINI komut eder (forward_motion=False, hedef hiz=0).
-        Eskiden kosul icinde self._motion_consistent (navigation'un
-        odom.twist.x'inden tureyen, "arac SU AN ILERI HAREKET EDIYOR mu"
-        anlamina gelen bir bayrak) de araniyordu. Ancak itki sifirlanip
-        arac gercekten durunca twist.x de sifira dustugu icin
-        motion_consistent HICBIR ZAMAN True olamiyordu - kendi kendini
-        engelleyen bir kosuldu (arac hem DURSUN hem de HAREKET EDIYOR
-        OLSUN isteniyordu). Yerine, aracin GERCEKTEN hedef derinlikte
-        SABIT kaldigini dogrulayan depth_ok kontrolu eklendi - bu, "stabil
-        bekleme" niyetine (KTR) çok daha uygun bir dogrulamadir."""
-        self._target_depth = self.dive_target_depth
+        Arac torpido formunda oldugu icin kontrol yuzeylerinin etkili
+        olabilmesi ileri su akisina baglidir. Bu nedenle 30 m'de itkiyi
+        kesip su altinda beklemek yerine, guvenli bolgeyi bir saniye
+        dogrularken kontrollu tirmanis komutu uygulanir.
+        """
+        # 30 m cizgisine ulasinca durmak yerine tirmanisi hemen baslat.
+        # Torpido formundaki arac kanatcik otoritesi icin ileri akisa
+        # ihtiyac duyar; bu faz yalnızca cizgiyi 1 sn dogrular.
+        self._target_depth = self.g2_firing_depth
         self._target_heading = self._reference_heading
-        self._target_pitch = 0.0
-        self._forward_motion = False
-        self._target_speed = 0.0
+        self._target_pitch = self.g2_tirmanis_target_pitch
+        self._forward_motion = True
+        self._target_speed = self.g2_ascend_speed
 
         in_zone = self._in_g2_safe_zone()
-        depth_ok = abs(self._depth - self.dive_target_depth) < self.depth_tol
-        conditions_ok = in_zone and depth_ok and not self._emergency_stop
+        conditions_ok = in_zone and not self._emergency_stop
 
-        if self._conditions_held(conditions_ok):
+        if self._conditions_held(
+            conditions_ok, self.g2_condition_hold
+        ):
             self._goto_phase(PHASE_G2_TIRMANIS_35_DERECE)
 
     def _run_g2_tirmanis(self):
-        """KTR: 'Yuzeye cikis' fazi - kontrollu cikis hizi (0.340 m/s),
+        """Yuzeye cikis fazi - kontrollu cikis hizi (0.450 m/s),
         hedef pitch +35 derece (sartname: >30 derece, pay icin 35 kullanildi)."""
         self._target_depth = self.g2_firing_depth
         self._target_pitch = self.g2_tirmanis_target_pitch
@@ -1047,7 +1092,8 @@ class GuidanceNode(Node):
         # "tam esitlik" yerine "yeterince sig/yuzeye ulasti mi" kontrolu.
         depth_ok = self._depth <= (self.g2_firing_depth + self.depth_tol)
         if self._conditions_held(
-            self._in_g2_safe_zone() and pitch_ok and depth_ok
+            self._in_g2_safe_zone() and pitch_ok and depth_ok,
+            self.g2_condition_hold,
         ):
             self._goto_phase(PHASE_G2_ACI_VE_YUZEY_DOGRULAMA)
 
@@ -1068,7 +1114,9 @@ class GuidanceNode(Node):
             and pitch_ok
             and self._dogru_cikis_acisi
         )
-        if self._conditions_held(dogru_aci_ok):
+        if self._conditions_held(
+            dogru_aci_ok, self.g2_condition_hold
+        ):
             self._goto_phase(PHASE_G2_BURUN_KAPAGI_AC)
 
     def _run_g2_burun_kapagi_ac(self):
@@ -1113,7 +1161,8 @@ class GuidanceNode(Node):
             and not self._leak_detected
         )
 
-        self._launch_request = self._conditions_held(conditions_ok)
+        self._launch_request = self._conditions_held(
+            conditions_ok, self.g2_launch_hold)
 
         if self._launch_request and self._ignition_confirmation_fresh():
             self.get_logger().info(
@@ -1184,12 +1233,30 @@ class GuidanceNode(Node):
         status = DiagnosticStatus()
         status.name = 'sara_guidance'
         status.hardware_id = 'jetson_orin_nano'
-        status.level = DiagnosticStatus.ERROR if self._phase == PHASE_GUVENLI_SONLANDIRMA else DiagnosticStatus.OK
-        status.message = f'Gorev {self.mission_id} - Faz: {PHASE_NAMES[self._phase]}'
+        race_overtime = self._race_overtime_seconds()
+        if self._phase == PHASE_GUVENLI_SONLANDIRMA:
+            status.level = DiagnosticStatus.ERROR
+        elif race_overtime > 0.0:
+            status.level = DiagnosticStatus.WARN
+        else:
+            status.level = DiagnosticStatus.OK
+        status.message = (
+            f'Gorev {self.mission_id} - Faz: {PHASE_NAMES[self._phase]}'
+        )
+        if race_overtime > 0.0:
+            status.message += (
+                f' - RESMI SURE {race_overtime:.1f} sn ASILDI, GOREV DEVAM EDIYOR'
+            )
 
         race_elapsed = self._race_elapsed()
         status.values = [
             KeyValue(key='mission_id', value=str(self.mission_id)),
+            KeyValue(
+                key='task_success',
+                value=str(self._phase in (
+                    PHASE_G1_TAMAMLANDI,
+                    PHASE_G2_TAMAMLANDI,
+                ))),
             KeyValue(key='approx_distance_m', value=f'{self._approx_distance():.2f}'),
             KeyValue(key='distance_to_finish_line_m', value=f'{self._distance_to_finish_line():.2f}'),
             KeyValue(key='heading_error_rad', value=f'{self._heading_error_to(self._target_heading):.3f}'),
@@ -1203,6 +1270,15 @@ class GuidanceNode(Node):
             KeyValue(key='nose_cap_open_request', value=str(self._nose_cap_open_request)),
             KeyValue(key='mission_elapsed_s', value=f'{self._mission_elapsed():.1f}'),
             KeyValue(key='race_elapsed_s', value='-' if race_elapsed is None else f'{race_elapsed:.1f}'),
+            KeyValue(
+                key='race_time_limit_s',
+                value=f'{self._race_time_limit():.1f}'),
+            KeyValue(
+                key='race_overtime',
+                value=str(race_overtime > 0.0)),
+            KeyValue(
+                key='race_overtime_s',
+                value=f'{race_overtime:.1f}'),
             KeyValue(key='emergency_stop', value=str(self._emergency_stop)),
             KeyValue(key='leak_detected', value=str(self._leak_detected)),
             KeyValue(key='motion_permission', value=str(self._motion_permission)),

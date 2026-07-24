@@ -10,12 +10,11 @@ vehicle_sim:
     # katsayilardir (dosyanin kendi basliginda zaten "gercek arac
     # testleriyle iyilestirilecek" diye isaretli). G2_ACILI_DALIS ve
     # G2_TIRMANIS_35_DERECE fazlarinin gecis kosulu MESAFE degil DERINLIK/
-    # ACIYA ULASMAK oldugu icin, asil darbogaz gudumdeki hedef hiz
-    # (g2_dive_speed_ms/g2_ascend_speed_ms - KTR'de hidrodinamik/motor
-    # hesaplarla raporlanmis, DEGISTIRILMEDI) degil, bu iki katsayidir.
+    # ACIYA ULASMAK oldugu icin bu katsayilar yalnizca test modelinin
+    # dinamik cevabini belirler. Gudum hizlari ayri olarak
+    # guidance_params.yaml dosyasindan yonetilir.
     # Degerler ~2x artirildi (0.5->1.0, 0.25->0.55) - SADECE simulasyonun
-    # tepki hizini artirir, gercek KTR degerlerine veya gudum mantigina
-    # HICBIR ETKISI YOKTUR.
+    # tepki hizini artirir; gercek aracin katsayisi olarak kullanilamaz.
     k_pitch: 1.0                  # (eski: 0.5) fin_pitch_command -> pitch_rate [rad/s per unit]
     k_buoyancy_pitch: 0.05        # buoyancy_command'in pitch'e yan etkisi
     # DUZELTME: navigation.py + autopilot.py'nin max_calibrated_speed_ms=1.076
