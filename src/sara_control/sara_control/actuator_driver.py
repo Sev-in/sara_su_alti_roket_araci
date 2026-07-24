@@ -146,6 +146,7 @@ class ActuatorDriverNode(Node):
         self._motor_state = 'DISCONNECTED'
         self._arm_requested = False
         self._motor_armed = False
+        self._heartbeat_confirmed = False
 
         self._thrust = 0.0
         self._fin = Vector3()
@@ -216,6 +217,7 @@ class ActuatorDriverNode(Node):
                 f'Uno seri baglantisi kesildi: {reason}')
         self._motor_armed = False
         self._arm_requested = False
+        self._heartbeat_confirmed = False
         self._ignition_commanded = False
         self._ignition_confirmed = False
         self._uno_ready = False
@@ -293,6 +295,14 @@ class ActuatorDriverNode(Node):
 
     def _command_tick(self):
         if not self._serial_ready():
+            return
+
+        # Uno, MOTOR_ARM komutundan once en az bir gecerli heartbeat
+        # gormelidir. READY ile ilk 20 Hz komut tiki 5 Hz heartbeat
+        # tikinden once calisabilir; telemetride heartbeat_ok=1
+        # dogrulanana kadar arming yerine yalnizca HB gonder.
+        if not self._heartbeat_confirmed:
+            self._write('HB')
             return
 
         blocked = (
@@ -414,11 +424,13 @@ class ActuatorDriverNode(Node):
             self._ready_timeout_reported = False
             self._motor_armed = False
             self._arm_requested = False
+            self._heartbeat_confirmed = False
             self._surface_running = False
             self._ignition_commanded = False
             self._ignition_confirmed = False
             self._motor_state = 'READY'
             self._last_error = '-'
+            self._write('HB')
             self.get_logger().info(
                 'Uno kalibrasyonu tamamlandi; komut iletimi etkin.')
             return
@@ -437,9 +449,15 @@ class ActuatorDriverNode(Node):
         if line.startswith('ERR,'):
             self._last_error = line
             self._error_count += 1
-            if line in ('ERR,HEARTBEAT_LOST', 'ERR,MOTOR_NOT_ARMED'):
+            if line in (
+                'ERR,HEARTBEAT_LOST',
+                'ERR,HEARTBEAT_REQUIRED',
+                'ERR,MOTOR_NOT_ARMED',
+            ):
                 self._motor_armed = False
                 self._arm_requested = False
+            if 'HEARTBEAT' in line:
+                self._heartbeat_confirmed = False
             if 'IGNITION' in line or 'HEARTBEAT' in line:
                 self._ignition_confirmed = False
             self.get_logger().warning(line)
@@ -458,6 +476,12 @@ class ActuatorDriverNode(Node):
                 self._motor_state = str(int(values['motor_state']))
             except (TypeError, ValueError, OverflowError):
                 pass
+        if 'heartbeat_ok' in values:
+            try:
+                self._heartbeat_confirmed = (
+                    int(values['heartbeat_ok']) == 1)
+            except (TypeError, ValueError, OverflowError):
+                self._heartbeat_confirmed = False
         if 'ignition_active' in values:
             try:
                 self._ignition_confirmed = (
@@ -542,6 +566,9 @@ class ActuatorDriverNode(Node):
                     else f'{self._age(self._last_pressure_time):.2f}')),
             KeyValue(key='motor_state', value=self._motor_state),
             KeyValue(key='motor_armed', value=str(self._motor_armed)),
+            KeyValue(
+                key='heartbeat_confirmed',
+                value=str(self._heartbeat_confirmed)),
             KeyValue(
                 key='surface_running',
                 value=str(self._surface_running)),
