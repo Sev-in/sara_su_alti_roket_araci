@@ -183,6 +183,7 @@ class AutopilotNode(Node):
         # --- Genel ---
         self.declare_parameter('depth_rate_lpf_alpha', 0.3)
         self.declare_parameter('use_navigation_depth_rate', True)
+        self.declare_parameter('enable_depth_trim', True)
         self.declare_parameter('control_rate_hz', 20.0)
         self.declare_parameter('nav_status_timeout_s', 2.0)
         # DUZELTME (guvenlik acigi): eskiden gudum katmaninin (guidance_node)
@@ -213,6 +214,8 @@ class AutopilotNode(Node):
         self.guidance_timeout = self.get_parameter('guidance_timeout_s').value
         self.use_navigation_depth_rate = self.get_parameter(
             'use_navigation_depth_rate').value
+        self.enable_depth_trim = bool(
+            self.get_parameter('enable_depth_trim').value)
         rate = float(self.get_parameter('control_rate_hz').value)
 
         self._depth_rate_lpf = LowPassFilter(self.get_parameter('depth_rate_lpf_alpha').value)
@@ -412,7 +415,10 @@ class AutopilotNode(Node):
             # UYGULAMIYORUZ - aksi halde otopilot, gudumun beklediginden cok
             # daha buyuk bir aciya gider ve gudum hicbir zaman "hedefe
             # ulasildi" diyemez (donanim kilitlenmesi bu yuzden olustu). ---
-            if abs(self._target_pitch) < self.explicit_pitch_threshold:
+            if (
+                self.enable_depth_trim
+                and abs(self._target_pitch) < self.explicit_pitch_threshold
+            ):
                 pitch_trim = self.pid_depth_trim.update(depth_error, depth_rate, dt)
                 effective_pitch_target = self._target_pitch - pitch_trim
             else:

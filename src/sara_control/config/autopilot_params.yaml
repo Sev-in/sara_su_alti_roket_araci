@@ -43,6 +43,7 @@ autopilot_node:
     # navigation.py basinc gecmisinden daha kararlı bir dikey hiz uretiyor.
     # Gecersizse otopilot kendi eski iki-nokta turevine otomatik geri doner.
     use_navigation_depth_rate: true
+    enable_depth_trim: true            # bench testinde yalniz IMU aci tepkisi icin false
     control_rate_hz: 20.0
     nav_status_timeout_s: 2.0
     # DUZELTME (guvenlik acigi): guidance_node'un heartbeat (target_pose)
