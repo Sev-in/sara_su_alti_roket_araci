@@ -62,6 +62,10 @@ from nav_msgs.msg import Odometry
 from geometry_msgs.msg import Vector3
 from diagnostic_msgs.msg import DiagnosticStatus, KeyValue
 
+from sara_control.mission_geometry import (
+    forward_distance_from_origin,
+    is_at_or_beyond_distance,
+)
 from sara_control.sensor_processing import DebouncedBoolean
 
 
@@ -71,6 +75,12 @@ def quaternion_to_pitch(x, y, z, w):
     return math.asin(sinp)
 
 
+def quaternion_to_yaw(x, y, z, w):
+    siny_cosp = 2.0 * (w * z + x * y)
+    cosy_cosp = 1.0 - 2.0 * (y * y + z * z)
+    return math.atan2(siny_cosp, cosy_cosp)
+
+
 class SafetyNode(Node):
 
     def __init__(self):
@@ -78,17 +88,19 @@ class SafetyNode(Node):
 
         self.declare_parameter('nav_status_timeout_s', 2.0)
         self.declare_parameter('control_rate_hz', 20.0)
-        # DUZELTME (Teknik Sartname Madde 4.1): "Arac su yuzeyine +30 dereceden
-        # FAZLA yunuslama aciSiyla ulasmali". Bu, gudumun kendi kontrolunden
-        # BAGIMSIZ ikinci bir dogrulama - bilerek gudumun esiginden (30) biraz
-        # daha DUSUK tutuluyor (25) ki iki bagimsiz kontrol ayni anda AYNI
-        # noktada basarisiz olmasin, ama yine de sartnamenin ruhuna (30 civari) sadik.
-        self.declare_parameter('launch_min_pitch_deg', 25.0)
+        # Teknik Sartname Madde 4.1: aci 30 dereceden buyuk olmalidir.
+        self.declare_parameter('launch_min_pitch_deg', 31.0)
+        self.declare_parameter('g2_safe_zone_min_m', 30.0)
+        self.declare_parameter('launch_max_depth_m', 0.15)
         self.declare_parameter('request_timeout_s', 0.5)
         self.declare_parameter('water_debounce_s', 0.3)
 
         self.nav_status_timeout = self.get_parameter('nav_status_timeout_s').value
         self.launch_min_pitch = math.radians(self.get_parameter('launch_min_pitch_deg').value)
+        self.g2_safe_zone_min = self.get_parameter(
+            'g2_safe_zone_min_m').value
+        self.launch_max_depth = self.get_parameter(
+            'launch_max_depth_m').value
         self.request_timeout = self.get_parameter('request_timeout_s').value
         rate = float(self.get_parameter('control_rate_hz').value)
 
@@ -112,6 +124,13 @@ class SafetyNode(Node):
             water_debounce, initial=True)
         self._pitch = 0.0
         self._depth = 0.0
+        self._x = 0.0
+        self._y = 0.0
+        self._heading = 0.0
+        self._mission_origin_x = 0.0
+        self._mission_origin_y = 0.0
+        self._mission_reference_heading = 0.0
+        self._mission_reference_set = False
 
         self._pixhawk_connected = False
         self._depth_valid = False
@@ -195,12 +214,20 @@ class SafetyNode(Node):
         self._task_complete = msg.data
 
     def _on_motion_permission(self, msg: Bool):
+        if msg.data and not self._motion_permission:
+            self._mission_origin_x = self._x
+            self._mission_origin_y = self._y
+            self._mission_reference_heading = self._heading
+            self._mission_reference_set = True
         self._motion_permission = msg.data
 
     def _on_odom(self, msg: Odometry):
         self._depth = msg.pose.pose.position.z
+        self._x = msg.pose.pose.position.x
+        self._y = msg.pose.pose.position.y
         q = msg.pose.pose.orientation
         self._pitch = quaternion_to_pitch(q.x, q.y, q.z, q.w)
+        self._heading = quaternion_to_yaw(q.x, q.y, q.z, q.w)
 
     def _on_surface(self, msg: Bool):
         self._surface_detected = msg.data
@@ -251,6 +278,26 @@ class SafetyNode(Node):
         age = (self.get_clock().now() - stamp).nanoseconds * 1e-9
         return age < self.request_timeout
 
+    def _g2_forward_distance(self) -> float:
+        if not self._mission_reference_set:
+            return 0.0
+        return forward_distance_from_origin(
+            self._x,
+            self._y,
+            self._mission_origin_x,
+            self._mission_origin_y,
+            self._mission_reference_heading,
+        )
+
+    def _in_g2_safe_zone(self) -> bool:
+        return (
+            self._mission_reference_set
+            and is_at_or_beyond_distance(
+                self._g2_forward_distance(),
+                self.g2_safe_zone_min,
+            )
+        )
+
     def _on_timer(self):
         block_reasons = []
 
@@ -295,7 +342,11 @@ class SafetyNode(Node):
 
         launch_conditions = {
             'core_safe': core_safe,
+            'hareket_izni': self._motion_permission,
             'gudum_istegi': self._launch_request,
+            'guvenli_atis_bolgesi': self._in_g2_safe_zone(),
+            'derinlik_gecerli': self._depth_valid,
+            'yuzey_derinligi': self._depth <= self.launch_max_depth,
             'burun_disarida_kuyruk_icerde': self._dogru_cikis_acisi,
             'burun_kapagi_acik': self._nose_cap_command_latched,
             'pitch_yeterli': self._pitch >= self.launch_min_pitch,
@@ -374,6 +425,12 @@ class SafetyNode(Node):
             KeyValue(key='nose_cap_command', value=str(nose_cap_cmd)),
             KeyValue(key='launch_command', value=str(launch_cmd)),
             KeyValue(key='pitch_deg', value=f'{math.degrees(self._pitch):.1f}'),
+            KeyValue(
+                key='g2_forward_distance_m',
+                value=f'{self._g2_forward_distance():.2f}'),
+            KeyValue(
+                key='g2_safe_zone',
+                value=str(self._in_g2_safe_zone())),
             KeyValue(key='surface_detected', value=str(self._surface_detected)),
             KeyValue(key='nose_submerged', value=str(self._nose_submerged)),
             KeyValue(key='tail_submerged', value=str(self._tail_submerged)),

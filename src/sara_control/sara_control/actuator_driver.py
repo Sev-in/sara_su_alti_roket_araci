@@ -157,7 +157,8 @@ class ActuatorDriverNode(Node):
         self._power_cutoff = False
         self._last_control_time = None
         self._surface_running = False
-        self._ignition_active = False
+        self._ignition_commanded = False
+        self._ignition_confirmed = False
 
         self._connect()
 
@@ -215,6 +216,8 @@ class ActuatorDriverNode(Node):
                 f'Uno seri baglantisi kesildi: {reason}')
         self._motor_armed = False
         self._arm_requested = False
+        self._ignition_commanded = False
+        self._ignition_confirmed = False
         self._uno_ready = False
         self._uno_ready_deadline = math.inf
         self._ready_timeout_reported = False
@@ -300,7 +303,8 @@ class ActuatorDriverNode(Node):
         if blocked:
             self._write('ALL_STOP')
             self._surface_running = False
-            self._ignition_active = False
+            self._ignition_commanded = False
+            self._ignition_confirmed = False
             self._motor_armed = False
             self._arm_requested = False
             return
@@ -350,10 +354,10 @@ class ActuatorDriverNode(Node):
             and self._motion_permission
             and not self._emergency_stop
         )
-        if ignition_requested != self._ignition_active:
+        if ignition_requested != self._ignition_commanded:
             self._write(
                 'IGNITION=1' if ignition_requested else 'IGNITION=0')
-            self._ignition_active = ignition_requested
+            self._ignition_commanded = ignition_requested
 
     def _read_serial(self):
         if self._serial is None:
@@ -411,7 +415,8 @@ class ActuatorDriverNode(Node):
             self._motor_armed = False
             self._arm_requested = False
             self._surface_running = False
-            self._ignition_active = False
+            self._ignition_commanded = False
+            self._ignition_confirmed = False
             self._motor_state = 'READY'
             self._last_error = '-'
             self.get_logger().info(
@@ -422,12 +427,21 @@ class ActuatorDriverNode(Node):
             self._arm_requested = False
             self._motor_state = 'ARMED'
             return
+        if line == 'OK,IGNITION_ACTIVE':
+            # Bu yalnizca komutun kabul edildigini bildirir. Gercek aktif
+            # durumu, Uno telemetrisindeki ignition_active alanindan gelir.
+            return
+        if line == 'OK,IGNITION_OFF':
+            self._ignition_confirmed = False
+            return
         if line.startswith('ERR,'):
             self._last_error = line
             self._error_count += 1
             if line in ('ERR,HEARTBEAT_LOST', 'ERR,MOTOR_NOT_ARMED'):
                 self._motor_armed = False
                 self._arm_requested = False
+            if 'IGNITION' in line or 'HEARTBEAT' in line:
+                self._ignition_confirmed = False
             self.get_logger().warning(line)
             return
         if line.startswith('READY,'):
@@ -444,6 +458,12 @@ class ActuatorDriverNode(Node):
                 self._motor_state = str(int(values['motor_state']))
             except (TypeError, ValueError, OverflowError):
                 pass
+        if 'ignition_active' in values:
+            try:
+                self._ignition_confirmed = (
+                    int(values['ignition_active']) == 1)
+            except (TypeError, ValueError, OverflowError):
+                self._ignition_confirmed = False
         if 'pressure_kpa' not in values:
             return
         try:
@@ -527,7 +547,10 @@ class ActuatorDriverNode(Node):
                 value=str(self._surface_running)),
             KeyValue(
                 key='ignition_active',
-                value=str(self._ignition_active)),
+                value=str(self._ignition_confirmed)),
+            KeyValue(
+                key='ignition_commanded',
+                value=str(self._ignition_commanded)),
             KeyValue(key='error_count', value=str(self._error_count)),
             KeyValue(
                 key='connection_count',

@@ -97,6 +97,8 @@ class MissionStartNode(Node):
         self._autopilot_status_level = DiagnosticStatus.STALE
         self._safety_status_time = None
         self._safety_status_level = DiagnosticStatus.STALE
+        self._actuator_status_time = None
+        self._actuator_status_level = DiagnosticStatus.STALE
 
         self.create_subscription(Bool, '/sara/mission_start/start_command', self._on_start_command, 10)
         self.create_subscription(Bool, '/sara/safety/emergency_stop', self._on_emergency_stop, 10)
@@ -104,6 +106,9 @@ class MissionStartNode(Node):
         self.create_subscription(DiagnosticStatus, '/sara/guidance/status', self._on_guidance_status, 10)  # YENI
         self.create_subscription(DiagnosticStatus, '/sara/control/status', self._on_autopilot_status, 10)
         self.create_subscription(DiagnosticStatus, '/sara/safety/status', self._on_safety_status, 10)
+        self.create_subscription(
+            DiagnosticStatus, '/sara/actuators/status',
+            self._on_actuator_status, 10)
 
         self._permission_pub = self.create_publisher(Bool, '/sara/mission_start/motion_permission', 10)
         self._warning_pub = self.create_publisher(Bool, '/sara/mission_start/acoustic_warning', 10)
@@ -144,6 +149,10 @@ class MissionStartNode(Node):
         self._safety_status_time = self.get_clock().now()
         self._safety_status_level = msg.level
 
+    def _on_actuator_status(self, msg: DiagnosticStatus):
+        self._actuator_status_time = self.get_clock().now()
+        self._actuator_status_level = msg.level
+
     def _subsystem_fresh(self, stamp) -> bool:
         if stamp is None:
             return False
@@ -177,6 +186,11 @@ class MissionStartNode(Node):
             problems.append('guvenlik_veri_yok')
         elif self._safety_status_level == DiagnosticStatus.ERROR:
             problems.append('guvenlik_ERROR')
+
+        if not self._subsystem_fresh(self._actuator_status_time):
+            problems.append('eyleyici_surucusu_veri_yok')
+        elif self._actuator_status_level == DiagnosticStatus.ERROR:
+            problems.append('eyleyici_surucusu_ERROR')
 
         return (len(problems) == 0), problems
 

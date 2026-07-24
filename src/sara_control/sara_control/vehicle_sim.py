@@ -56,6 +56,7 @@ from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
 from std_msgs.msg import Bool, Float64
 from sensor_msgs.msg import Imu, FluidPressure
 from geometry_msgs.msg import Vector3
+from diagnostic_msgs.msg import DiagnosticStatus, KeyValue
 
 
 def euler_to_quaternion(roll, pitch, yaw):
@@ -124,6 +125,7 @@ class VehicleSimNode(Node):
         self._fin_pitch_cmd = 0.0
         self._fin_yaw_cmd = 0.0
         self._buoyancy_cmd = 0.0
+        self._launch_cmd = False
 
         self._last_sim_time = self.get_clock().now()
 
@@ -133,12 +135,16 @@ class VehicleSimNode(Node):
         self.create_subscription(Float64, '/sara/control/thrust_command', self._on_thrust, 10)
         self.create_subscription(Vector3, '/sara/control/fin_command', self._on_fin, 10)
         self.create_subscription(Float64, '/sara/control/buoyancy_command', self._on_buoyancy, 10)
+        self.create_subscription(
+            Bool, '/sara/control/launch_command', self._on_launch, 10)
 
         # ================= Yayinlar - navigation_node'un bekledigi sensor topic'leri =================
         self._imu_pub = self.create_publisher(Imu, '/sara/imu/data', qos)
         self._pressure_pub = self.create_publisher(FluidPressure, '/sara/pressure', qos)
         self._water1_pub = self.create_publisher(Bool, '/sara/water_detect_1', qos)
         self._water2_pub = self.create_publisher(Bool, '/sara/water_detect_2', qos)
+        self._actuator_status_pub = self.create_publisher(
+            DiagnosticStatus, '/sara/actuators/status', 10)
 
         self.create_timer(1.0 / rate, self._on_timer)
 
@@ -158,6 +164,9 @@ class VehicleSimNode(Node):
 
     def _on_buoyancy(self, msg: Float64):
         self._buoyancy_cmd = msg.data
+
+    def _on_launch(self, msg: Bool):
+        self._launch_cmd = bool(msg.data)
 
     # ======================================================================
     def _on_timer(self):
@@ -233,6 +242,18 @@ class VehicleSimNode(Node):
         w2.data = tail_submerged  # /sara/water_detect_2 = KUYRUK sensoru
         self._water1_pub.publish(w1)
         self._water2_pub.publish(w2)
+
+        actuator_status = DiagnosticStatus()
+        actuator_status.name = 'sara_vehicle_sim_actuators'
+        actuator_status.hardware_id = 'vehicle_sim'
+        actuator_status.level = DiagnosticStatus.OK
+        actuator_status.message = 'Simule eyleyiciler nominal'
+        actuator_status.values = [
+            KeyValue(
+                key='ignition_active',
+                value=str(self._launch_cmd)),
+        ]
+        self._actuator_status_pub.publish(actuator_status)
 
 
 def main(args=None):

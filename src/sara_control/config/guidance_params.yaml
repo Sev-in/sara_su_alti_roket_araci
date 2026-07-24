@@ -17,7 +17,9 @@ guidance_node:
     kararlilik_suresi_s: 3.0          # kosul kesintisiz saglanma suresi
     max_mission_duration_s: 600.0     # fail-safe: azami gorev suresi
     g1_max_race_duration_s: 180.0     # sartname: Asama-1 icin 3 dakika
+    g2_max_race_duration_s: 60.0      # sartname: Asama-2 icin 1 dakika
     g2_ates_sinyali_timeout_s: 30.0   # atesleme fazina ozel, bagimsiz zaman asimi
+    g2_actuator_status_timeout_s: 1.5 # Uno/eyleyici atesleme onayi canlilik siniri
     nav_status_timeout_s: 2.0         # fail-safe: navigasyon veri zaman asimi
     startup_grace_period_s: 5.0       # baslangicta nav fail-safe'i erken tetiklenmesin
     control_rate_hz: 10.0
@@ -57,13 +59,10 @@ guidance_node:
     # --- Gorev 2 (Atis) mesafe/aci esikleri ---
     g2_duz_seyir_distance_m: 30.0         # madde1: 30 m duz git (ACILI_DALIS + 30M_TAMAMLAMA_SEYIR
                                            # TOPLAMDA bu mesafeyi kat eder)
-    # Guvenli atis bolgesi: 30m hedefi etrafinda tolerans bandi. Sartname
-    # bunun disinda ayrica saha/GPS koordinati vermiyor; arac GPS/DVL'siz
-    # oldugu icin (dead-reckoning) mesafe bazli bir bant olarak modellenmis -
-    # saha testlerinde dead-reckoning sapmasina gore ayarlanabilir.
-    g2_safe_zone_min_m: 25.0
-    g2_safe_zone_max_m: 35.0
+    # Sartname Sekil 3: 30 m minimum uzaklasma cizgisidir. Guvenli atis
+    # bolgesi bu cizgiden sonra baslar; sartnamede ust mesafe siniri yoktur.
+    g2_safe_zone_min_m: 30.0
     g2_tirmanis_target_pitch_deg: 35.0    # sartname: >30 derece, 35 pay icin kullanildi
-    g2_min_launch_pitch_deg: 30.0         # sartname 4.1: ">30 derece" - tek yonlu esik
+    g2_min_launch_pitch_deg: 31.0         # sartname 4.1: ">30 derece"; 1 derece emniyet payi
     g2_firing_depth: 0.0                  # gercek yuzey (0m) - ara derinlik DEGIL
     g2_nose_cap_open_duration_s: 3.0      # TODO: gercek servo suresiyle guncellenecek

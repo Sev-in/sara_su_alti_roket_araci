@@ -6,9 +6,11 @@ safety_node:
     nav_status_timeout_s: 2.0
     control_rate_hz: 20.0
     # Sartname 4.1: ">30 derece" - guduмden BAGIMSIZ ikinci dogrulama,
-    # bilerek gudumun esiginden (30) biraz dusuk tutuluyor (25) ki iki
-    # bagimsiz kontrol ayni anda AYNI noktada basarisiz olmasin.
-    launch_min_pitch_deg: 25.0
+    # Bagimsiz guvenlik esigi de sartnameden daha gevsek olamaz.
+    # 31 derece, ">30 derece" kosulunu 1 derece emniyet payiyla uygular.
+    launch_min_pitch_deg: 31.0
+    g2_safe_zone_min_m: 30.0
+    launch_max_depth_m: 0.15
     request_timeout_s: 0.5
     # Burun/kuyruk atis kosulu tek bir gurultulu GPIO ornegine dayanmasin.
     water_debounce_s: 0.3

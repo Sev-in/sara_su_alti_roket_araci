@@ -85,9 +85,8 @@ derinlik/heading/pitch/hiz ve gorev fazi kararlarini uretir (Otopilot/PID
 katmani bunlari tuketir). Burun kapagi acma ve ates sinyali de birer
 "ISTEK/komut talebidir" - launch_request ozelinde nihai firlatma
 onayi ayri bir Guvenlik Katmani dugumunde (safety.py) BAGIMSIZ olarak
-dogrulanir (orn. launch_min_pitch_deg=25, gudumun 30 derece esiginden
-KASITLI olarak dusuk tutulur - iki bagimsiz kontrol ayni anda AYNI
-noktada basarisiz olmasin diye).
+dogrulanir. Iki katman da sartnamenin ">30 derece" kosulunu 31 derece
+esikle uygular.
 
 Girdi:
     /sara/navigation/odom               (nav_msgs/Odometry)
@@ -126,6 +125,10 @@ from nav_msgs.msg import Odometry
 from geometry_msgs.msg import PoseStamped
 from diagnostic_msgs.msg import DiagnosticStatus, KeyValue
 
+from sara_control.mission_geometry import (
+    forward_distance_from_origin,
+    is_at_or_beyond_distance,
+)
 from sara_control.sensor_processing import DebouncedBoolean
 
 
@@ -234,7 +237,9 @@ class GuidanceNode(Node):
         self.declare_parameter('kararlilik_suresi_s', 3.0)           # kosul kesintisiz saglanma suresi
         self.declare_parameter('max_mission_duration_s', 600.0)      # fail-safe: azami gorev suresi
         self.declare_parameter('g1_max_race_duration_s', 180.0)      # sartname: Asama-1 icin 3 dakika
+        self.declare_parameter('g2_max_race_duration_s', 60.0)       # sartname: Asama-2 icin 1 dakika
         self.declare_parameter('g2_ates_sinyali_timeout_s', 30.0)     # atesleme fazina OZEL, BAGIMSIZ zaman asimi
+        self.declare_parameter('g2_actuator_status_timeout_s', 1.5)
         self.declare_parameter('nav_status_timeout_s', 2.0)           # fail-safe: navigasyon veri zaman asimi
         self.declare_parameter('startup_grace_period_s', 5.0)          # baslangicta diger node'lar henuz
                                                                             # yayina baslamadan "nav gecersiz"
@@ -278,16 +283,12 @@ class GuidanceNode(Node):
         self.declare_parameter('g2_duz_seyir_distance_m', 30.0)          # madde 1: 30 m duz git (ACILI_DALIS +
                                                                               # 30M_TAMAMLAMA_SEYIR TOPLAMDA bu
                                                                               # mesafeyi kat eder)
-        # Guvenli atis bolgesi: 30m'lik mesafe hedefi etrafinda tolerans bandi.
-        # Sartname bunun disinda ayrica bir saha/GPS koordinati vermiyor;
-        # arac GPS/DVL'siz oldugu icin (dead-reckoning) bu, mesafe bazli
-        # bir tolerans bandi olarak modellenmistir - saha testleriyle
-        # (dead-reckoning sapma miktarina gore) ayarlanabilir.
-        self.declare_parameter('g2_safe_zone_min_m', 25.0)
-        self.declare_parameter('g2_safe_zone_max_m', 35.0)
+        # Sartname Sekil 3: 30 m, kiyidan minimum uzaklasma cizgisidir.
+        # Guvenli atis bolgesi bu cizginin otesindedir; ust sinir verilmez.
+        self.declare_parameter('g2_safe_zone_min_m', 30.0)
         self.declare_parameter('g2_tirmanis_target_pitch_deg', 35.0)         # madde 3: 30 dereceden FAZLA
                                                                                   # hedeflenmeli, pay icin 35 kullanildi
-        self.declare_parameter('g2_min_launch_pitch_deg', 30.0)               # sartname 4.1: ">30 derece" (Madde 4.1)
+        self.declare_parameter('g2_min_launch_pitch_deg', 31.0)               # sartname 4.1: ">30 derece"
         self.declare_parameter('g2_firing_depth', 0.0)                        # gorev tanimi acikca "yuzeye cik"
                                                                                   # diyor - gercek yuzey (0m)
         self.declare_parameter('g2_nose_cap_open_duration_s', 3.0)            # TODO: gercek servo suresiyle
@@ -303,7 +304,10 @@ class GuidanceNode(Node):
         self.kararlilik_suresi = self.get_parameter('kararlilik_suresi_s').value
         self.max_mission_duration = self.get_parameter('max_mission_duration_s').value
         self.g1_max_race_duration = self.get_parameter('g1_max_race_duration_s').value
+        self.g2_max_race_duration = self.get_parameter('g2_max_race_duration_s').value
         self.g2_ates_sinyali_timeout = self.get_parameter('g2_ates_sinyali_timeout_s').value
+        self.g2_actuator_status_timeout = self.get_parameter(
+            'g2_actuator_status_timeout_s').value
         self.nav_status_timeout = self.get_parameter('nav_status_timeout_s').value
         self.startup_grace_period = self.get_parameter('startup_grace_period_s').value
         self.periodic_log_interval = self.get_parameter('periodic_log_interval_s').value
@@ -326,7 +330,6 @@ class GuidanceNode(Node):
 
         self.g2_duz_seyir_distance = self.get_parameter('g2_duz_seyir_distance_m').value
         self.g2_safe_zone_min = self.get_parameter('g2_safe_zone_min_m').value
-        self.g2_safe_zone_max = self.get_parameter('g2_safe_zone_max_m').value
         self.g2_tirmanis_target_pitch = math.radians(self.get_parameter('g2_tirmanis_target_pitch_deg').value)
         self.g2_min_launch_pitch = math.radians(self.get_parameter('g2_min_launch_pitch_deg').value)
         self.g2_firing_depth = self.get_parameter('g2_firing_depth').value
@@ -351,6 +354,8 @@ class GuidanceNode(Node):
 
         self._reference_heading = 0.0
         self._reference_depth = 0.0
+        self._mission_origin_x = 0.0
+        self._mission_origin_y = 0.0
 
         self._depth = 0.0
         self._heading = 0.0
@@ -370,6 +375,9 @@ class GuidanceNode(Node):
             water_debounce, initial=True)
         self._last_nav_status_time = None
         self._nav_status_level = DiagnosticStatus.STALE
+        self._last_actuator_status_time = None
+        self._actuator_status_level = DiagnosticStatus.STALE
+        self._ignition_confirmed = False
 
         self._emergency_stop = False
         self._leak_detected = False
@@ -401,6 +409,9 @@ class GuidanceNode(Node):
         self.create_subscription(Bool, '/sara/water_detect_1', self._on_water_nose, sensor_qos)  # burun sensoru
         self.create_subscription(Bool, '/sara/water_detect_2', self._on_water_tail, sensor_qos)  # kuyruk sensoru
         self.create_subscription(DiagnosticStatus, '/sara/navigation/status', self._on_nav_status, 10)
+        self.create_subscription(
+            DiagnosticStatus, '/sara/actuators/status',
+            self._on_actuator_status, 10)
         self.create_subscription(Bool, '/sara/safety/emergency_stop', self._on_emergency_stop, 10)
         self.create_subscription(Bool, '/sara/safety/leak_detected', self._on_leak, 10)
         # Gorev Baslatma / Akustik Uyari Katmani (ayri node - mission_start.py, Tablo 11)
@@ -475,6 +486,13 @@ class GuidanceNode(Node):
         self._pixhawk_connected = values.get('pixhawk_connected', 'False') == 'True'
         self._depth_valid = values.get('depth_valid', 'False') == 'True'
 
+    def _on_actuator_status(self, msg: DiagnosticStatus):
+        self._last_actuator_status_time = self.get_clock().now()
+        self._actuator_status_level = msg.level
+        values = {kv.key: kv.value for kv in msg.values}
+        self._ignition_confirmed = (
+            values.get('ignition_active', 'False') == 'True')
+
     def _on_emergency_stop(self, msg: Bool):
         self._emergency_stop = msg.data
 
@@ -488,7 +506,22 @@ class GuidanceNode(Node):
     # Yardimci hesaplar
     # ======================================================================
     def _approx_distance(self) -> float:
-        return math.hypot(self._approx_x, self._approx_y)
+        return max(
+            0.0,
+            forward_distance_from_origin(
+                self._approx_x,
+                self._approx_y,
+                self._mission_origin_x,
+                self._mission_origin_y,
+                self._reference_heading,
+            ),
+        )
+
+    def _in_g2_safe_zone(self) -> bool:
+        return is_at_or_beyond_distance(
+            self._approx_distance(),
+            self.g2_safe_zone_min,
+        )
 
     def _heading_error_to(self, target_heading: float) -> float:
         return wrap_pi(target_heading - self._heading)
@@ -513,6 +546,18 @@ class GuidanceNode(Node):
         if age > self.nav_status_timeout:
             return False
         return self._nav_status_level != DiagnosticStatus.ERROR
+
+    def _ignition_confirmation_fresh(self) -> bool:
+        if self._last_actuator_status_time is None:
+            return False
+        age = (
+            self.get_clock().now() - self._last_actuator_status_time
+        ).nanoseconds * 1e-9
+        return (
+            age <= self.g2_actuator_status_timeout
+            and self._actuator_status_level != DiagnosticStatus.ERROR
+            and self._ignition_confirmed
+        )
 
     def _mission_elapsed(self) -> float:
         return (self.get_clock().now() - self._mission_start_time).nanoseconds * 1e-9
@@ -626,14 +671,23 @@ class GuidanceNode(Node):
                 f'Asama-1 icin {self.g1_max_race_duration:.0f} sn '
                 'yarisma suresi asildi')
         elif (
+            self.mission_id == 2
+            and self._race_timer_start is not None
+            and self._race_elapsed() > self.g2_max_race_duration
+        ):
+            failsafe_reason = (
+                f'Asama-2 icin {self.g2_max_race_duration:.0f} sn '
+                'yarisma suresi asildi')
+        elif (
             self._phase == PHASE_G2_ATES_SINYALI_GONDER
             and self._phase_elapsed() > self.g2_ates_sinyali_timeout
-            and not self._launch_request
+            and not self._ignition_confirmation_fresh()
         ):
-            # BAGIMSIZ fail-safe: atesleme kosullari bu fazda cok uzun
-            # suredir saglanamiyorsa (launch_request hic True olamadiysa),
-            # genel 600sn siniri beklemeden guvenli sonlandir.
-            failsafe_reason = f'atesleme kosullari {self.g2_ates_sinyali_timeout:.0f} sn icinde saglanamadi'
+            # BAGIMSIZ fail-safe: komut kosullari saglansa bile Uno aktif
+            # atesleme telemetrisi gelmezse genel siniri bekleme.
+            failsafe_reason = (
+                f'Uno atesleme onayi '
+                f'{self.g2_ates_sinyali_timeout:.0f} sn icinde gelmedi')
 
         if failsafe_reason is not None and self._phase not in TERMINAL_PHASES:
             self.get_logger().error(f'GUVENLI SONLANDIRMA tetiklendi: {failsafe_reason}')
@@ -710,6 +764,8 @@ class GuidanceNode(Node):
         if self._conditions_held(stable):
             self._reference_heading = self._heading
             self._reference_depth = self._depth
+            self._mission_origin_x = self._approx_x
+            self._mission_origin_y = self._approx_y
             self.get_logger().info(
                 f'Referanslar belirlendi: heading={math.degrees(self._reference_heading):.1f} deg, '
                 f'derinlik={self._reference_depth:.2f} m'
@@ -969,8 +1025,7 @@ class GuidanceNode(Node):
         self._forward_motion = False
         self._target_speed = 0.0
 
-        dist = self._approx_distance()
-        in_zone = self.g2_safe_zone_min <= dist <= self.g2_safe_zone_max
+        in_zone = self._in_g2_safe_zone()
         depth_ok = abs(self._depth - self.dive_target_depth) < self.depth_tol
         conditions_ok = in_zone and depth_ok and not self._emergency_stop
 
@@ -991,7 +1046,9 @@ class GuidanceNode(Node):
         # Derinlik fiziksel olarak 0'in altina inemez (yuzey siniri) -
         # "tam esitlik" yerine "yeterince sig/yuzeye ulasti mi" kontrolu.
         depth_ok = self._depth <= (self.g2_firing_depth + self.depth_tol)
-        if self._conditions_held(pitch_ok and depth_ok):
+        if self._conditions_held(
+            self._in_g2_safe_zone() and pitch_ok and depth_ok
+        ):
             self._goto_phase(PHASE_G2_ACI_VE_YUZEY_DOGRULAMA)
 
     def _run_g2_aci_ve_yuzey_dogrulama(self):
@@ -1006,7 +1063,11 @@ class GuidanceNode(Node):
         self._target_speed = self.g2_ascend_speed
 
         pitch_ok = self._pitch >= self.g2_min_launch_pitch  # >30 derece sarti, tek yonlu
-        dogru_aci_ok = pitch_ok and self._dogru_cikis_acisi
+        dogru_aci_ok = (
+            self._in_g2_safe_zone()
+            and pitch_ok
+            and self._dogru_cikis_acisi
+        )
         if self._conditions_held(dogru_aci_ok):
             self._goto_phase(PHASE_G2_BURUN_KAPAGI_AC)
 
@@ -1017,7 +1078,17 @@ class GuidanceNode(Node):
         self._target_speed = self.g2_ascend_speed
         self._nose_cap_open_request = True
 
-        if self._phase_elapsed() >= self.g2_nose_cap_open_duration:
+        ready_to_continue = (
+            self._in_g2_safe_zone()
+            and self._pitch >= self.g2_min_launch_pitch
+            and self._dogru_cikis_acisi
+            and self._depth_valid
+            and self._depth <= (self.g2_firing_depth + self.depth_tol)
+        )
+        if (
+            ready_to_continue
+            and self._phase_elapsed() >= self.g2_nose_cap_open_duration
+        ):
             self._goto_phase(PHASE_G2_ATES_SINYALI_GONDER)
 
     def _run_g2_ates_sinyali(self):
@@ -1033,7 +1104,10 @@ class GuidanceNode(Node):
         # bayrakla DEGIL, "burun su disinda VE kuyruk su icinde" TAM
         # kosuluyla verilmelidir.
         conditions_ok = (
-            pitch_ok and nav_ok
+            self._in_g2_safe_zone()
+            and pitch_ok and nav_ok
+            and self._depth_valid
+            and self._depth <= (self.g2_firing_depth + self.depth_tol)
             and self._dogru_cikis_acisi
             and not self._emergency_stop
             and not self._leak_detected
@@ -1041,7 +1115,9 @@ class GuidanceNode(Node):
 
         self._launch_request = self._conditions_held(conditions_ok)
 
-        if self._launch_request and self._phase_elapsed() > (self.kararlilik_suresi * 3.0):
+        if self._launch_request and self._ignition_confirmation_fresh():
+            self.get_logger().info(
+                'Uno atesleme cikisini dogruladi; Gorev 2 tamamlandi.')
             self._goto_phase(PHASE_G2_TAMAMLANDI)
 
     def _run_g2_tamamlandi(self):
@@ -1119,7 +1195,11 @@ class GuidanceNode(Node):
             KeyValue(key='heading_error_rad', value=f'{self._heading_error_to(self._target_heading):.3f}'),
             KeyValue(key='pitch_deg', value=f'{math.degrees(self._pitch):.1f}'),
             KeyValue(key='target_speed_ms', value=f'{self._target_speed:.3f}'),
+            KeyValue(key='g2_safe_zone', value=str(self._in_g2_safe_zone())),
             KeyValue(key='launch_request', value=str(self._launch_request)),
+            KeyValue(
+                key='ignition_confirmed',
+                value=str(self._ignition_confirmation_fresh())),
             KeyValue(key='nose_cap_open_request', value=str(self._nose_cap_open_request)),
             KeyValue(key='mission_elapsed_s', value=f'{self._mission_elapsed():.1f}'),
             KeyValue(key='race_elapsed_s', value='-' if race_elapsed is None else f'{race_elapsed:.1f}'),
