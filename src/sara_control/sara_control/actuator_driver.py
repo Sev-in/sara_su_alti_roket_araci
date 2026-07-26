@@ -147,6 +147,7 @@ class ActuatorDriverNode(Node):
         self._error_count = 0
         self._connection_count = 0
         self._motor_state = 'DISCONNECTED'
+        self._esc_us = None
         self._arm_requested = False
         self._motor_armed = False
         self._heartbeat_confirmed = False
@@ -227,6 +228,7 @@ class ActuatorDriverNode(Node):
         self._uno_ready_deadline = math.inf
         self._ready_timeout_reported = False
         self._motor_state = 'DISCONNECTED'
+        self._esc_us = None
         self._last_error = str(reason)
         self._error_count += 1
 
@@ -479,6 +481,13 @@ class ActuatorDriverNode(Node):
                 self._motor_state = str(int(values['motor_state']))
             except (TypeError, ValueError, OverflowError):
                 pass
+        if 'esc_us' in values:
+            try:
+                esc_us = int(values['esc_us'])
+                if 500 <= esc_us <= 2500:
+                    self._esc_us = esc_us
+            except (TypeError, ValueError, OverflowError):
+                pass
         if 'heartbeat_ok' in values:
             try:
                 self._heartbeat_confirmed = (
@@ -568,6 +577,11 @@ class ActuatorDriverNode(Node):
                     '-' if self._last_pressure_time is None
                     else f'{self._age(self._last_pressure_time):.2f}')),
             KeyValue(key='motor_state', value=self._motor_state),
+            KeyValue(
+                key='esc_us',
+                value=(
+                    '-' if self._esc_us is None
+                    else str(self._esc_us))),
             KeyValue(key='motor_armed', value=str(self._motor_armed)),
             KeyValue(
                 key='heartbeat_confirmed',

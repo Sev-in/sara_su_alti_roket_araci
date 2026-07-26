@@ -43,9 +43,9 @@ const uint16_t SERVO_MAX_US = 2500;
 const float KANAT_SERVO_MIN_DERECE = 45.0f;
 const float KANAT_SERVO_MAX_DERECE = 135.0f;
 
-// Cift yonlu ESC: ileri yon 1500 us altinda.
+// Kullanilan ESC: 1500 us arm/dur, 2200 us tam itki.
 const uint16_t ESC_NOTR_US = 1500;
-const uint16_t ESC_TAM_ITKI_US = 1100;
+const uint16_t ESC_TAM_ITKI_US = 2200;
 const uint16_t ESC_RAMP_ADIM_US = 20;
 const unsigned long ESC_RAMP_ARALIGI_MS = 100;
 const unsigned long ARM_BEKLEME_MS = 3000;
@@ -210,8 +210,8 @@ void itkiKomutunuUygula(float normalizeItki)
     return;
   }
   hedefEscUs = (uint16_t)(
-      ESC_NOTR_US -
-      normalizeItki * (float)(ESC_NOTR_US - ESC_TAM_ITKI_US));
+      ESC_NOTR_US +
+      normalizeItki * (float)(ESC_TAM_ITKI_US - ESC_NOTR_US));
   motorDurumu = MOTOR_RUNNING;
 }
 
