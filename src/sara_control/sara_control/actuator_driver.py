@@ -49,8 +49,8 @@ class ActuatorDriverNode(Node):
         self.declare_parameter('reconnect_interval_s', 1.0)
 
         self.declare_parameter('servo_center_deg', 90.0)
-        self.declare_parameter('pitch_max_offset_deg', 30.0)
-        self.declare_parameter('yaw_max_offset_deg', 20.0)
+        self.declare_parameter('pitch_max_offset_deg', 35.0)
+        self.declare_parameter('yaw_max_offset_deg', 35.0)
         # Autopilot PID hatasi hedef-mevcut tanimlidir; +1 isareti,
         # standalone mevcut-referans/-1 davranisiyla ayni fiziksel
         # servo yonunu uretir.

@@ -7,8 +7,8 @@ imu_actuator_bench:
     motor_test_speed_ms: 0.15
     max_motor_test_speed_ms: 0.25
     max_calibrated_speed_ms: 1.076
-    pitch_max_angle_deg: 30.0
-    yaw_max_angle_deg: 20.0
+    pitch_max_angle_deg: 35.0
+    yaw_max_angle_deg: 35.0
     gain: 1.0
     sign_pitch: -1.0
     sign_roll: -1.0

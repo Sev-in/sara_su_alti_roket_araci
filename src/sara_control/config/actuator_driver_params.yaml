@@ -12,8 +12,10 @@ actuator_driver:
     reconnect_interval_s: 1.0
 
     servo_center_deg: 90.0
-    pitch_max_offset_deg: 30.0
-    yaw_max_offset_deg: 20.0
+    # CH1 pitch ve CH2 yaw kontrol servolari 90 derece merkezden
+    # iki yonde en fazla 35 derece sapar (fiziksel komut araligi 55..125).
+    pitch_max_offset_deg: 35.0
+    yaw_max_offset_deg: 35.0
     # PID hatasi hedef-mevcut olarak tanimlidir. Standalone kod ise
     # mevcut-referans kullandigi icin eski -1 isaretlerini burada tekrar
     # uygulamak fiziksel servo yonunu tersine ceviriyordu.

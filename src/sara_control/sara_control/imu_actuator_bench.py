@@ -3,8 +3,8 @@
 
 Servo davranisi, sahada iyi calistigi bildirilen standalone kodla aynidir:
 
-* CH1/pitch: referansa gore pitch farki, +-30 derece
-* CH2/yaw: roll ve yaw farkindan mutlak degeri buyuk olan, +-20 derece
+* CH1/pitch: referansa gore pitch farki, +-35 derece
+* CH2/yaw: roll ve yaw farkindan mutlak degeri buyuk olan, +-35 derece
 
 Bu dugum donanimi dogrudan surmez. Normalize komutlar yine
 safety -> actuator_driver -> Uno/PCA9685 zincirinden gecer. Burun kapagi,
@@ -58,8 +58,8 @@ class ImuActuatorBench(Node):
         self.declare_parameter('motor_test_speed_ms', 0.15)
         self.declare_parameter('max_motor_test_speed_ms', 0.25)
         self.declare_parameter('max_calibrated_speed_ms', 1.076)
-        self.declare_parameter('pitch_max_angle_deg', 30.0)
-        self.declare_parameter('yaw_max_angle_deg', 20.0)
+        self.declare_parameter('pitch_max_angle_deg', 35.0)
+        self.declare_parameter('yaw_max_angle_deg', 35.0)
         self.declare_parameter('gain', 1.0)
         self.declare_parameter('sign_pitch', -1.0)
         self.declare_parameter('sign_roll', -1.0)

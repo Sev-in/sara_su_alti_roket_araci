@@ -10,8 +10,8 @@ KULLANIM:
     ros2 launch sara_control sara_system.launch.py mode:=test mission_id:=1
     ros2 launch sara_control sara_system.launch.py mode:=test mission_id:=2
 
-  Gercek donanim modu (Pixhawk/MAVROS BAGLI OLMALI, mavros ayrica
-  baslatilmis olmalidir - bu launch dosyasi mavros'u BASLATMAZ):
+  Gercek donanim modu (Pixhawk bagli olmali; MAVROS varsayilan olarak
+  bu launch dosyasi tarafindan baslatilir):
     ros2 launch sara_control sara_system.launch.py mode:=hardware mission_id:=1
 
   Hizli test iterasyonu (60 sn motor inhibit suresini gecici dusurmek icin -
@@ -34,6 +34,10 @@ ARGUMANLAR:
     auto_start     : Ana enerjilendirmede motor-inhibit geri sayimini
                      otomatik baslatir. Varsayilan: 'true'. 'false' verilirse
                      /sara/mission_start/start_command beklenir.
+    start_mavros   : Hardware modunda MAVROS'u ayni launch icinde baslatir.
+                     Varsayilan: 'true'. MAVROS zaten elle calisiyorsa
+                     port cakismamasi icin 'false' verilmelidir.
+    fcu_url        : Pixhawk seri portu ve baud hizi.
 
 DUZELTME (v2 - kapsamli denetim): Asagidaki iki KRITIK hata bu surumde
 duzeltilmistir:
@@ -80,20 +84,26 @@ DAHIL EDILMEMISTIR:
 Her node, once kendi config/*.yaml dosyasini okur, SONRA launch
 argumanlari (orn. mission_id) bu degerlerin UZERINE yazar.
 
-NOT: 'hardware' modunda, bu launch dosyasindan ONCE ayrica su calistirilmis
-olmalidir (bu launch dosyasi mavros baglantisini KURMAZ):
-    ros2 launch mavros px4.launch (veya ilgili apm/px4 launch dosyaniz)
+NOT: MAVROS zaten ayri bir terminalde calisiyorsa:
+    ros2 launch sara_control sara_system.launch.py mode:=hardware \
+      mission_id:=1 start_mavros:=false
 """
 
 import os
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
 from launch.conditions import IfCondition
-from launch.substitutions import LaunchConfiguration, PythonExpression
+from launch.launch_description_sources import AnyLaunchDescriptionSource
+from launch.substitutions import (
+    LaunchConfiguration,
+    PathJoinSubstitution,
+    PythonExpression,
+)
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
+from launch_ros.substitutions import FindPackageShare
 
 
 def generate_launch_description():
@@ -131,6 +141,21 @@ def generate_launch_description():
             'baslat; false ise start_command bekle'
         )
     )
+    start_mavros_arg = DeclareLaunchArgument(
+        'start_mavros', default_value='true',
+        description=(
+            'Hardware modunda MAVROS PX4 baglantisini bu launch icinde '
+            'baslat; MAVROS zaten calisiyorsa false kullan'
+        )
+    )
+    fcu_url_arg = DeclareLaunchArgument(
+        'fcu_url',
+        default_value=(
+            'serial:///dev/serial/by-id/'
+            'usb-Auterion_PX4_FMU_v6C.x_0-if00:921600'
+        ),
+        description='Pixhawk MAVROS seri baglanti URLsi',
+    )
 
     mission_id = LaunchConfiguration('mission_id')
     mode = LaunchConfiguration('mode')
@@ -138,9 +163,27 @@ def generate_launch_description():
     log_directory = LaunchConfiguration('log_directory')
     motor_inhibit_duration_s = LaunchConfiguration('motor_inhibit_duration_s')
     auto_start = LaunchConfiguration('auto_start')
+    start_mavros = LaunchConfiguration('start_mavros')
+    fcu_url = LaunchConfiguration('fcu_url')
 
     is_test_mode = PythonExpression(["'", mode, "' == 'test'"])
     is_hardware_mode = PythonExpression(["'", mode, "' == 'hardware'"])
+    start_hardware_mavros = PythonExpression([
+        "'", mode, "' == 'hardware' and '",
+        start_mavros, "'.lower() == 'true'",
+    ])
+
+    mavros_node = IncludeLaunchDescription(
+        AnyLaunchDescriptionSource(
+            PathJoinSubstitution([
+                FindPackageShare('mavros'),
+                'launch',
+                'px4.launch',
+            ])
+        ),
+        launch_arguments={'fcu_url': fcu_url}.items(),
+        condition=IfCondition(start_hardware_mavros),
+    )
 
     # ================= TEST MODU - sahte sensor/fizik simulatoru =================
     vehicle_sim_node = Node(
@@ -253,7 +296,10 @@ def generate_launch_description():
         log_directory_arg,
         motor_inhibit_arg,
         auto_start_arg,
+        start_mavros_arg,
+        fcu_url_arg,
 
+        mavros_node,
         vehicle_sim_node,
         actuator_driver_node,
         sensor_get_data_node,
