@@ -85,6 +85,8 @@ def generate_launch_description():
             output='screen',
             parameters=[
                 os.path.join(config_dir, 'safety_params.yaml'),
+                # Bench testinde CH3 su sensoru desenini anlik takip eder.
+                {'nose_cap_latching': False},
             ],
         ),
         Node(

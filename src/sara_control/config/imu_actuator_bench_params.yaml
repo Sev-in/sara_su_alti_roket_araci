@@ -14,4 +14,6 @@ imu_actuator_bench:
     sign_roll: -1.0
     sign_yaw: -1.0
     imu_timeout_s: 0.5
+    water_timeout_s: 1.0
+    water_debounce_s: 0.3
     publish_rate_hz: 20.0

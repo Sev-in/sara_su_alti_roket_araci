@@ -94,6 +94,7 @@ class SafetyNode(Node):
         self.declare_parameter('launch_max_depth_m', 0.15)
         self.declare_parameter('request_timeout_s', 0.5)
         self.declare_parameter('water_debounce_s', 0.3)
+        self.declare_parameter('nose_cap_latching', True)
 
         self.nav_status_timeout = self.get_parameter('nav_status_timeout_s').value
         self.launch_min_pitch = math.radians(self.get_parameter('launch_min_pitch_deg').value)
@@ -102,6 +103,8 @@ class SafetyNode(Node):
         self.launch_max_depth = self.get_parameter(
             'launch_max_depth_m').value
         self.request_timeout = self.get_parameter('request_timeout_s').value
+        self.nose_cap_latching = bool(
+            self.get_parameter('nose_cap_latching').value)
         rate = float(self.get_parameter('control_rate_hz').value)
 
         self._thrust_request = 0.0
@@ -332,8 +335,14 @@ class SafetyNode(Node):
         else:
             buoyancy_command = 0.0
 
-        if core_safe and self._nose_cap_open_request:
-            self._nose_cap_command_latched = True
+        if self.nose_cap_latching:
+            if core_safe and self._nose_cap_open_request:
+                self._nose_cap_command_latched = True
+        else:
+            # Bench modunda CH3, su sensoru kosulu kaybolunca tekrar
+            # 0 dereceye donebilmelidir. Gercek gorevde mandal aciktir.
+            self._nose_cap_command_latched = bool(
+                core_safe and self._nose_cap_open_request)
         if not core_safe:
             block_reasons.append('burun_kapagi_bloklandi')
             nose_cap_command = False

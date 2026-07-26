@@ -14,3 +14,5 @@ safety_node:
     request_timeout_s: 0.5
     # Burun/kuyruk atis kosulu tek bir gurultulu GPIO ornegine dayanmasin.
     water_debounce_s: 0.3
+    # Gercek gorevde acilan burun kapagi tekrar kapanmasin.
+    nose_cap_latching: true

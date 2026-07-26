@@ -5,6 +5,7 @@ Servo davranisi, sahada iyi calistigi bildirilen standalone kodla aynidir:
 
 * CH1/pitch: referansa gore pitch farki, +-35 derece
 * CH2/yaw: roll ve yaw farkindan mutlak degeri buyuk olan, +-35 derece
+* CH3/burun: burun kuru ve kuyruk islaksa acik, aksi halde kapali
 
 Bu dugum donanimi dogrudan surmez. Normalize komutlar yine
 safety -> actuator_driver -> Uno/PCA9685 zincirinden gecer. Burun kapagi,
@@ -18,7 +19,10 @@ from geometry_msgs.msg import Vector3
 from nav_msgs.msg import Odometry
 import rclpy
 from rclpy.node import Node
+from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
 from std_msgs.msg import Bool, Float64
+
+from sara_control.sensor_processing import DebouncedBoolean
 
 
 def clamp(value, lower, upper):
@@ -65,6 +69,8 @@ class ImuActuatorBench(Node):
         self.declare_parameter('sign_roll', -1.0)
         self.declare_parameter('sign_yaw', -1.0)
         self.declare_parameter('imu_timeout_s', 0.5)
+        self.declare_parameter('water_timeout_s', 1.0)
+        self.declare_parameter('water_debounce_s', 0.3)
         self.declare_parameter('publish_rate_hz', 20.0)
 
         enable_motor = bool(self.get_parameter('enable_motor').value)
@@ -100,12 +106,22 @@ class ImuActuatorBench(Node):
         self._sign_yaw = float(self.get_parameter('sign_yaw').value)
         self._imu_timeout = max(
             0.1, float(self.get_parameter('imu_timeout_s').value))
+        self._water_timeout = max(
+            0.1, float(self.get_parameter('water_timeout_s').value))
+        water_debounce = max(
+            0.0, float(self.get_parameter('water_debounce_s').value))
 
         self._navigation_ready = False
         self._reference = None
         self._last_odom_time = None
         self._pitch_offset = 0.0
         self._yaw_offset = 0.0
+        self._water_1 = None
+        self._water_2 = None
+        self._last_water_1_time = None
+        self._last_water_2_time = None
+        self._water_1_debounce = DebouncedBoolean(water_debounce)
+        self._water_2_debounce = DebouncedBoolean(water_debounce)
 
         self.create_subscription(
             Odometry, '/sara/navigation/odom', self._on_odom, 10)
@@ -115,6 +131,15 @@ class ImuActuatorBench(Node):
             self._on_navigation_status,
             10,
         )
+        sensor_qos = QoSProfile(
+            reliability=ReliabilityPolicy.BEST_EFFORT,
+            history=HistoryPolicy.KEEP_LAST,
+            depth=10,
+        )
+        self.create_subscription(
+            Bool, '/sara/water_detect_1', self._on_water_1, sensor_qos)
+        self.create_subscription(
+            Bool, '/sara/water_detect_2', self._on_water_2, sensor_qos)
 
         self._thrust_pub = self.create_publisher(
             Float64, '/sara/control/thrust_request', 10)
@@ -155,6 +180,22 @@ class ImuActuatorBench(Node):
         values = {item.key: item.value for item in msg.values}
         self._navigation_ready = (
             values.get('pixhawk_connected', 'False') == 'True')
+
+    def _on_water_1(self, msg):
+        now = self.get_clock().now()
+        stable = self._water_1_debounce.update(
+            msg.data, now.nanoseconds * 1e-9)
+        if stable is not None:
+            self._water_1 = stable
+        self._last_water_1_time = now
+
+    def _on_water_2(self, msg):
+        now = self.get_clock().now()
+        stable = self._water_2_debounce.update(
+            msg.data, now.nanoseconds * 1e-9)
+        if stable is not None:
+            self._water_2 = stable
+        self._last_water_2_time = now
 
     def _on_odom(self, msg):
         self._last_odom_time = self.get_clock().now()
@@ -203,6 +244,27 @@ class ImuActuatorBench(Node):
         ).nanoseconds * 1e-9
         return age <= self._imu_timeout
 
+    def _water_stamp_fresh(self, stamp):
+        if stamp is None:
+            return False
+        age = (
+            self.get_clock().now() - stamp
+        ).nanoseconds * 1e-9
+        return age <= self._water_timeout
+
+    def _nose_open_from_water(self):
+        sensors_fresh = (
+            self._water_stamp_fresh(self._last_water_1_time)
+            and self._water_stamp_fresh(self._last_water_2_time)
+        )
+        # Standalone kodla ayni karar:
+        # burun kuru (False) + kuyruk islak (True) -> CH3=90 derece.
+        return bool(
+            sensors_fresh
+            and self._water_1 is False
+            and self._water_2 is True
+        )
+
     def _publish_commands(self):
         ready = (
             self._navigation_ready
@@ -212,9 +274,13 @@ class ImuActuatorBench(Node):
 
         disabled = Bool()
         disabled.data = False
-        self._cap_pub.publish(disabled)
         self._launch_pub.publish(disabled)
         self._complete_pub.publish(disabled)
+
+        nose_open = self._nose_open_from_water()
+        cap = Bool()
+        cap.data = nose_open
+        self._cap_pub.publish(cap)
 
         permitted = Bool()
         permitted.data = bool(ready and self._motor_enabled)
@@ -257,6 +323,15 @@ class ImuActuatorBench(Node):
             KeyValue(
                 key='yaw_servo_deg',
                 value=f'{90.0 + self._yaw_offset:.1f}'),
+            KeyValue(
+                key='water_1_nose',
+                value=str(self._water_1)),
+            KeyValue(
+                key='water_2_tail',
+                value=str(self._water_2)),
+            KeyValue(
+                key='ch3_nose_open',
+                value=str(nose_open)),
         ]
         self._status_pub.publish(status)
 
