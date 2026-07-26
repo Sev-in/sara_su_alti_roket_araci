@@ -5,9 +5,10 @@ imu_actuator_bench:
     enable_motor: false
     confirm_motor_test_safe: false
     motor_test_speed_ms: 0.15
-    # Tezgah testi ust siniri. Once 0.35, gerekirse 0.50 m/s denenmelidir.
-    # Gercek gorev hizindan dusuk tutularak ani tam-guc komutu engellenir.
-    max_motor_test_speed_ms: 0.50
+    # Ters PWM yonunde once 0.50, gerekirse 0.70 m/s denenmelidir.
+    # 0.70 m/s, onceki 0.50 m/s / 2200 us testine yakin darbe sapmasi
+    # uretirken 1000 us belgeli sinirin icinde kalir.
+    max_motor_test_speed_ms: 0.70
     max_calibrated_speed_ms: 1.076
     pitch_max_angle_deg: 35.0
     yaw_max_angle_deg: 35.0

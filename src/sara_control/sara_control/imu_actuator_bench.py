@@ -60,7 +60,7 @@ class ImuActuatorBench(Node):
         self.declare_parameter('enable_motor', False)
         self.declare_parameter('confirm_motor_test_safe', False)
         self.declare_parameter('motor_test_speed_ms', 0.15)
-        self.declare_parameter('max_motor_test_speed_ms', 0.50)
+        self.declare_parameter('max_motor_test_speed_ms', 0.70)
         self.declare_parameter('max_calibrated_speed_ms', 1.076)
         self.declare_parameter('pitch_max_angle_deg', 35.0)
         self.declare_parameter('yaw_max_angle_deg', 35.0)
