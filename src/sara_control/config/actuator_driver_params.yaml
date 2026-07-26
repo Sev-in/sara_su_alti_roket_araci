@@ -14,9 +14,11 @@ actuator_driver:
     servo_center_deg: 90.0
     pitch_max_offset_deg: 30.0
     yaw_max_offset_deg: 20.0
-    # Ekli tezgah kodundaki mekanik yonler korunmustur.
-    pitch_sign: -1.0
-    yaw_sign: -1.0
+    # PID hatasi hedef-mevcut olarak tanimlidir. Standalone kod ise
+    # mevcut-referans kullandigi icin eski -1 isaretlerini burada tekrar
+    # uygulamak fiziksel servo yonunu tersine ceviriyordu.
+    pitch_sign: 1.0
+    yaw_sign: 1.0
     nose_closed_deg: 0.0
     nose_open_deg: 90.0
 

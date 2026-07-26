@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Pixhawk hareketi -> PID -> servo ve sinirli motor donanim testi.
+"""Pixhawk hareketi -> dogrudan servo ve sinirli motor donanim testi.
 
 Bu launch mission_start ve guidance dugumlerini baslatmaz. Burun kapagi,
 siringa ve atesleme istekleri her dongude False tutulur. Komutlar normal
@@ -54,6 +54,10 @@ def generate_launch_description():
             output='screen',
             parameters=[
                 os.path.join(config_dir, 'actuator_driver_params.yaml'),
+                # Standalone kod servo acisini dogrudan 90+offset olarak
+                # hesaplar. Bench dugumu normalize offset yayinladigi icin
+                # ikinci bir isaret terslemesi uygulanmaz.
+                {'pitch_sign': 1.0, 'yaw_sign': 1.0},
             ],
         ),
         Node(
@@ -72,16 +76,6 @@ def generate_launch_description():
             output='screen',
             parameters=[
                 os.path.join(config_dir, 'navigation_params.yaml'),
-            ],
-        ),
-        Node(
-            package='sara_control',
-            executable='autopilot',
-            name='autopilot_node',
-            output='screen',
-            parameters=[
-                os.path.join(config_dir, 'autopilot_params.yaml'),
-                {'enable_depth_trim': False},
             ],
         ),
         Node(
