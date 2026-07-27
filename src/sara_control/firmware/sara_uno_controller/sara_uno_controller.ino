@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include <Wire.h>
 #include <Adafruit_PWMServoDriver.h>
+#include <Servo.h>
 
 /*
  * SARA Arduino Uno + PCA9685 guvenli donanim yazilimi
@@ -8,7 +9,9 @@
  * Donanim:
  *   SEN0257 sari -> A0
  *   PCA9685 SDA/SCL -> A4/A5
- *   CH1 pitch, CH2 yaw, CH3 burun kapagi, CH4 ESC, CH5 siringa
+ *   PCA9685 CH1 pitch, CH2 yaw, CH3 burun kapagi, CH4 ESC
+ *   D9 -> siringa servosu SINYAL hatti
+ *         (servo gucu harici 5-6 V kaynaktan, GND ortak)
  *   D2 -> fiziksel atesleme inhibit butonu (INPUT_PULLUP)
  *   D7 -> LM2596 enable (aktif LOW varsayimi)
  *   USB serial -> Jetson Orin Nano, 115200 baud
@@ -36,7 +39,6 @@ const uint8_t PITCH_SERVO_KANALI = 1;
 const uint8_t YAW_SERVO_KANALI = 2;
 const uint8_t BURUN_SERVO_KANALI = 3;
 const uint8_t ESC_KANALI = 4;
-const uint8_t YUZEY_SERVO_KANALI = 5;
 
 const uint16_t SERVO_MIN_US = 500;
 const uint16_t SERVO_MAX_US = 2500;
@@ -56,8 +58,10 @@ const uint16_t ESC_RAMP_ADIM_US = 20;
 const unsigned long ESC_RAMP_ARALIGI_MS = 100;
 const unsigned long ARM_BEKLEME_MS = 3000;
 
-// CH5 siringa servosu. Normal gorev komutlari korunur; yalnizca
+// D9 siringa servosu. D9 yalnizca sinyal uretir; servo kesinlikle
+// Uno 5 V pininden beslenmemelidir. Normal gorev komutlari korunur; yalnizca
 // SURFACE_SWEEP_START test komutu 0-180 derece arasinda tarama yapar.
+const uint8_t YUZEY_SERVO_PINI = 9;
 const uint16_t YUZEY_SERVO_DUR_US = 1500;
 const uint16_t YUZEY_SERVO_CALIS_US = 1700;
 const uint16_t YUZEY_TARAMA_MIN_US = SERVO_MIN_US;
@@ -74,6 +78,7 @@ const uint8_t LM2596_ENABLE_PINI = 7;  // aktif LOW
 const uint8_t DURUM_LED_PINI = LED_BUILTIN;
 
 Adafruit_PWMServoDriver pwm(PCA9685_ADRESI);
+Servo yuzeyServo;
 
 enum MotorDurumu : uint8_t {
   MOTOR_DISARMED = 0,
@@ -152,7 +157,7 @@ void motorNotr(MotorDurumu durum)
 void yuzeyServosunuDurdur()
 {
   yuzeyServoTaramaAktif = false;
-  pwm.writeMicroseconds(YUZEY_SERVO_KANALI, YUZEY_SERVO_DUR_US);
+  yuzeyServo.writeMicroseconds(YUZEY_SERVO_DUR_US);
   yuzeyServoCalisiyor = false;
 }
 
@@ -326,8 +331,7 @@ void komutuIsle(char *komut)
       Serial.println("ERR,HEARTBEAT_REQUIRED");
     } else {
       yuzeyServoTaramaAktif = false;
-      pwm.writeMicroseconds(
-          YUZEY_SERVO_KANALI, YUZEY_SERVO_CALIS_US);
+      yuzeyServo.writeMicroseconds(YUZEY_SERVO_CALIS_US);
       yuzeyServoCalisiyor = true;
       Serial.println("OK,SURFACE_SERVO_RUNNING");
     }
@@ -343,7 +347,7 @@ void komutuIsle(char *komut)
       sonYuzeyTaramaMs = millis();
       yuzeyServoTaramaAktif = true;
       yuzeyServoCalisiyor = true;
-      pwm.writeMicroseconds(YUZEY_SERVO_KANALI, yuzeyTaramaUs);
+      yuzeyServo.writeMicroseconds(yuzeyTaramaUs);
       Serial.println("OK,SURFACE_SWEEP_RUNNING");
     }
     return;
@@ -469,7 +473,7 @@ void yuzeyServoTaramasiniGuncelle()
   }
 
   yuzeyTaramaUs = (uint16_t)sonrakiUs;
-  pwm.writeMicroseconds(YUZEY_SERVO_KANALI, yuzeyTaramaUs);
+  yuzeyServo.writeMicroseconds(yuzeyTaramaUs);
 }
 
 void basinciOkuVeYayinla()
@@ -525,6 +529,7 @@ void setup()
   Wire.begin();
   pwm.begin();
   pwm.setPWMFreq(50);
+  yuzeyServo.attach(YUZEY_SERVO_PINI, SERVO_MIN_US, SERVO_MAX_US);
   delay(10);
 
   tumunuGuvenliDurdur();

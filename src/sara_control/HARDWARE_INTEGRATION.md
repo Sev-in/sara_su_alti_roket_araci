@@ -8,6 +8,8 @@
 - Arduino Uno -> Jetson `/dev/ttyUSB0`, 115200 baud
 - SEN0257 -> Uno A0
 - PCA9685 -> Uno A4/A5
+- Siringa servosu sinyal -> Uno D9
+- Siringa servosu guc -> harici regule 5-6 V (Uno ile ortak GND)
 
 Bir fiziksel kaynagi yalniz bir node acar. Uno seri portunun tek sahibi
 `actuator_driver`; SEN0257 telemetrisini de bu node yayinlar.
@@ -20,7 +22,10 @@ Bir fiziksel kaynagi yalniz bir node acar. Uno seri portunun tek sahibi
 | CH2 | Yaw kanat servosu |
 | CH3 | Burun kapagi servosu |
 | CH4 | Cift yonlu ESC |
-| CH5 | Siringa/yuzeye cikis servosu |
+
+PCA9685 CH5 kullanilmaz. Siringa/yuzeye cikis servosunun yalnizca
+sinyal kablosu Uno D9'a baglanir. Servo Uno 5 V pininden beslenmez;
+harici servo beslemesinin GND hatti Uno GND ile ortaklanir.
 
 ## ROS veri yolu
 

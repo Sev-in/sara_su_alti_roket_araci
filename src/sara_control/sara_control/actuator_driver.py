@@ -187,7 +187,7 @@ class ActuatorDriverNode(Node):
             'Yalnizca safety_node *_command ciktilari uygulanir.')
         if self.surface_servo_test_mode:
             self.get_logger().warning(
-                'CH5 SIRINGA TEST MODU ETKIN: CH5 0-180 derece '
+                'D9 SIRINGA TEST MODU ETKIN: Uno D9 servosu 0-180 derece '
                 'surekli tarama yapacak; '
                 'motor ve atesleme actuator_driver tarafinda zorla '
                 'guvenli tutulacak.')
@@ -600,7 +600,7 @@ class ActuatorDriverNode(Node):
             status.message = 'Uno seri baglanti/basinc telemetrisi hazir degil'
         elif self.surface_servo_test_mode:
             status.level = DiagnosticStatus.WARN
-            status.message = 'CH5 0-180 derece siringa tarama testi etkin'
+            status.message = 'D9 0-180 derece siringa tarama testi etkin'
         else:
             status.level = DiagnosticStatus.OK
             status.message = 'Nominal'
