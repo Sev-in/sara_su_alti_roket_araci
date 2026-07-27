@@ -186,8 +186,8 @@ class ActuatorDriverNode(Node):
         if self.surface_servo_test_mode:
             self.get_logger().warning(
                 'CH5 SIRINGA TEST MODU ETKIN: CH5 surekli calisacak; '
-                'motor, kanat hareketi, burun kapagi ve atesleme '
-                'actuator_driver tarafinda zorla guvenli tutulacak.')
+                'motor ve atesleme actuator_driver tarafinda zorla '
+                'guvenli tutulacak.')
 
     def _connect(self):
         self._last_connect_attempt = time.monotonic()
@@ -348,13 +348,13 @@ class ActuatorDriverNode(Node):
         self._write(f'THRUST={thrust:.3f}')
 
         pitch_deg = normalized_fin_to_servo(
-            0.0 if self.surface_servo_test_mode else self._fin.x,
+            self._fin.x,
             self.servo_center,
             self.pitch_max_offset,
             self.pitch_sign,
         )
         yaw_deg = normalized_fin_to_servo(
-            0.0 if self.surface_servo_test_mode else self._fin.y,
+            self._fin.y,
             self.servo_center,
             self.yaw_max_offset,
             self.yaw_sign,
@@ -366,8 +366,6 @@ class ActuatorDriverNode(Node):
             self.nose_open if self._nose_open_request
             else self.nose_closed
         )
-        if self.surface_servo_test_mode:
-            nose_deg = self.nose_closed
         self._write(f'NOSE={nose_deg:.1f}')
 
         surface_requested = (

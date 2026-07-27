@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Pixhawk hareketi -> dogrudan servo ve sinirli motor donanim testi.
 
-Bu launch mission_start ve guidance dugumlerini baslatmaz. Burun kapagi,
-siringa ve atesleme istekleri her dongude False tutulur. Komutlar normal
-safety_node ve actuator_driver zincirinden gecmeye devam eder.
+Bu launch mission_start ve guidance dugumlerini baslatmaz. Burun kapagi
+su sensoru desenini izler. Siringa, enable_surface_servo aciksa surekli
+calisir; atesleme her dongude False tutulur. Komutlar normal safety_node
+ve actuator_driver zincirinden gecmeye devam eder.
 """
 
 import os
@@ -36,17 +37,27 @@ def generate_launch_description():
     speed_arg = DeclareLaunchArgument(
         'motor_test_speed_ms',
         default_value='0.15',
-        description='Bench motor hedef hizi; kod tarafinda en fazla 0.25 m/s',
+        description='Bench motor hedef hizi; kod tarafinda en fazla 0.70 m/s',
+    )
+    surface_servo_arg = DeclareLaunchArgument(
+        'enable_surface_servo',
+        default_value='false',
+        description=(
+            'CH5 siringa servosunu bench boyunca surekli calistirir; '
+            'actuator_driver motoru ve ateslemeyi zorla kapali tutar'
+        ),
     )
 
     enable_motor = LaunchConfiguration('enable_motor')
     confirmed = LaunchConfiguration('confirm_motor_test_safe')
     motor_speed = LaunchConfiguration('motor_test_speed_ms')
+    enable_surface_servo = LaunchConfiguration('enable_surface_servo')
 
     return LaunchDescription([
         enable_motor_arg,
         confirm_arg,
         speed_arg,
+        surface_servo_arg,
         Node(
             package='sara_control',
             executable='actuator_driver',
@@ -57,7 +68,12 @@ def generate_launch_description():
                 # Standalone kod servo acisini dogrudan 90+offset olarak
                 # hesaplar. Bench dugumu normalize offset yayinladigi icin
                 # ikinci bir isaret terslemesi uygulanmaz.
-                {'pitch_sign': 1.0, 'yaw_sign': 1.0},
+                {
+                    'pitch_sign': 1.0,
+                    'yaw_sign': 1.0,
+                    'surface_servo_test_mode': ParameterValue(
+                        enable_surface_servo, value_type=bool),
+                },
             ],
         ),
         Node(
