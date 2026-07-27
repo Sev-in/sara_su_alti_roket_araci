@@ -3,8 +3,8 @@
 
 Bu launch mission_start ve guidance dugumlerini baslatmaz. Burun kapagi
 su sensoru desenini izler. Siringa, enable_surface_servo aciksa surekli
-calisir; atesleme her dongude False tutulur. Komutlar normal safety_node
-ve actuator_driver zincirinden gecmeye devam eder.
+0-180 derece tarama yapar; atesleme her dongude False tutulur. Komutlar
+normal safety_node ve actuator_driver zincirinden gecmeye devam eder.
 """
 
 import os
@@ -43,7 +43,7 @@ def generate_launch_description():
         'enable_surface_servo',
         default_value='false',
         description=(
-            'CH5 siringa servosunu bench boyunca surekli calistirir; '
+            'CH5 siringa servosunu bench boyunca 0-180 derece tarar; '
             'actuator_driver motoru ve ateslemeyi zorla kapali tutar'
         ),
     )

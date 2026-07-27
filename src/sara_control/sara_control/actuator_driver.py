@@ -165,6 +165,8 @@ class ActuatorDriverNode(Node):
         self._power_cutoff = False
         self._last_control_time = None
         self._surface_running = False
+        self._surface_running_confirmed = False
+        self._surface_sweep_confirmed = False
         self._ignition_commanded = False
         self._ignition_confirmed = False
 
@@ -185,7 +187,8 @@ class ActuatorDriverNode(Node):
             'Yalnizca safety_node *_command ciktilari uygulanir.')
         if self.surface_servo_test_mode:
             self.get_logger().warning(
-                'CH5 SIRINGA TEST MODU ETKIN: CH5 surekli calisacak; '
+                'CH5 SIRINGA TEST MODU ETKIN: CH5 0-180 derece '
+                'surekli tarama yapacak; '
                 'motor ve atesleme actuator_driver tarafinda zorla '
                 'guvenli tutulacak.')
 
@@ -230,6 +233,8 @@ class ActuatorDriverNode(Node):
         self._motor_armed = False
         self._arm_requested = False
         self._heartbeat_confirmed = False
+        self._surface_running_confirmed = False
+        self._surface_sweep_confirmed = False
         self._ignition_commanded = False
         self._ignition_confirmed = False
         self._uno_ready = False
@@ -373,8 +378,14 @@ class ActuatorDriverNode(Node):
             or self._buoyancy < self.surface_threshold
         )
         if surface_requested != self._surface_running:
-            self._write(
-                'SURFACE_START' if surface_requested else 'SURFACE_STOP')
+            if surface_requested:
+                self._write(
+                    'SURFACE_SWEEP_START'
+                    if self.surface_servo_test_mode
+                    else 'SURFACE_START'
+                )
+            else:
+                self._write('SURFACE_STOP')
             self._surface_running = surface_requested
 
         ignition_requested = (
@@ -446,6 +457,8 @@ class ActuatorDriverNode(Node):
             self._arm_requested = False
             self._heartbeat_confirmed = False
             self._surface_running = False
+            self._surface_running_confirmed = False
+            self._surface_sweep_confirmed = False
             self._ignition_commanded = False
             self._ignition_confirmed = False
             self._motor_state = 'READY'
@@ -509,6 +522,18 @@ class ActuatorDriverNode(Node):
                     int(values['heartbeat_ok']) == 1)
             except (TypeError, ValueError, OverflowError):
                 self._heartbeat_confirmed = False
+        if 'surface_running' in values:
+            try:
+                self._surface_running_confirmed = (
+                    int(values['surface_running']) == 1)
+            except (TypeError, ValueError, OverflowError):
+                self._surface_running_confirmed = False
+        if 'surface_sweep' in values:
+            try:
+                self._surface_sweep_confirmed = (
+                    int(values['surface_sweep']) == 1)
+            except (TypeError, ValueError, OverflowError):
+                self._surface_sweep_confirmed = False
         if 'ignition_active' in values:
             try:
                 self._ignition_confirmed = (
@@ -575,7 +600,7 @@ class ActuatorDriverNode(Node):
             status.message = 'Uno seri baglanti/basinc telemetrisi hazir degil'
         elif self.surface_servo_test_mode:
             status.level = DiagnosticStatus.WARN
-            status.message = 'CH5 surekli siringa test modu etkin'
+            status.message = 'CH5 0-180 derece siringa tarama testi etkin'
         else:
             status.level = DiagnosticStatus.OK
             status.message = 'Nominal'
@@ -607,6 +632,12 @@ class ActuatorDriverNode(Node):
             KeyValue(
                 key='surface_running',
                 value=str(self._surface_running)),
+            KeyValue(
+                key='surface_running_confirmed',
+                value=str(self._surface_running_confirmed)),
+            KeyValue(
+                key='surface_sweep_confirmed',
+                value=str(self._surface_sweep_confirmed)),
             KeyValue(
                 key='ignition_active',
                 value=str(self._ignition_confirmed)),

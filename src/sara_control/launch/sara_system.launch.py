@@ -145,8 +145,8 @@ def generate_launch_description():
         'surface_servo_test_mode', default_value='false',
         description=(
             'SADECE TEZGAH TESTI: CH5 siringa servosunu heartbeat boyunca '
-            'surekli calistirir; motor, kanatlar, burun kapagi ve atesleme '
-            'actuator_driver tarafinda zorla guvenli tutulur'
+            '0-180 derece tarar; motor ve atesleme actuator_driver '
+            'tarafinda zorla guvenli tutulur'
         )
     )
     start_mavros_arg = DeclareLaunchArgument(
