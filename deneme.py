@@ -6,8 +6,8 @@ uyumludur:
 
 * Uno READY olana kadar bekler.
 * Heartbeat'i 5 Hz gonderir.
-* SURFACE_START ile CH5'i surekli donus komutuna getirir.
-* Ctrl+C, sure dolumu veya hata halinde SURFACE_STOP ve ALL_STOP yollar.
+* SURFACE_SWEEP_START ile CH5'i 0-180 derece arasinda ileri-geri tarar.
+* Ctrl+C, sure dolumu veya hata halinde taramayi ve tum cikislari durdurur.
 
 actuator_driver veya Arduino Serial Monitor ayni anda calistirilmamalidir.
 """
@@ -90,6 +90,7 @@ def stop_surface_servo(connection):
     """CH5'i ve diger cikislari guvenli duruma getir."""
     try:
         send_command(connection, 'HB')
+        send_command(connection, 'SURFACE_SWEEP_STOP')
         send_command(connection, 'SURFACE_STOP')
         send_command(connection, 'ALL_STOP')
     except Exception as exc:
@@ -113,9 +114,9 @@ def run_test(port, baud, ready_timeout_s, duration_s):
         send_command(uno, 'IGNITION=0')
         send_command(uno, 'SURFACE_STOP')
         time.sleep(0.05)
-        send_command(uno, 'SURFACE_START')
+        send_command(uno, 'SURFACE_SWEEP_START')
         print(
-            'CH5 calistirma komutu gonderildi. '
+            'CH5 0-180 derece tarama komutu gonderildi. '
             'Durdurmak icin Ctrl+C kullan.'
         )
 
@@ -137,7 +138,7 @@ def run_test(port, baud, ready_timeout_s, duration_s):
                 line = read_line(uno)
                 if line:
                     print(f'UNO: {line}')
-                    if line == 'OK,SURFACE_SERVO_RUNNING':
+                    if line == 'OK,SURFACE_SWEEP_RUNNING':
                         confirmed = True
                     if line.startswith('ERR,'):
                         if line in NON_FATAL_ERRORS:
@@ -150,7 +151,7 @@ def run_test(port, baud, ready_timeout_s, duration_s):
 
                 if not confirmed and now - start_time > 2.0:
                     print(
-                        'UYARI: Uno SURFACE_SERVO_RUNNING onayi vermedi.',
+                        'UYARI: Uno SURFACE_SWEEP_RUNNING onayi vermedi.',
                         file=sys.stderr,
                     )
                     confirmed = True

@@ -56,9 +56,14 @@ const uint16_t ESC_RAMP_ADIM_US = 20;
 const unsigned long ESC_RAMP_ARALIGI_MS = 100;
 const unsigned long ARM_BEKLEME_MS = 3000;
 
-// Surekli donus siringa servosu.
+// CH5 siringa servosu. Normal gorev komutlari korunur; yalnizca
+// SURFACE_SWEEP_START test komutu 0-180 derece arasinda tarama yapar.
 const uint16_t YUZEY_SERVO_DUR_US = 1500;
 const uint16_t YUZEY_SERVO_CALIS_US = 1700;
+const uint16_t YUZEY_TARAMA_MIN_US = SERVO_MIN_US;
+const uint16_t YUZEY_TARAMA_MAX_US = SERVO_MAX_US;
+const uint16_t YUZEY_TARAMA_ADIM_US = 10;
+const unsigned long YUZEY_TARAMA_ARALIGI_MS = 20;
 
 // ---------------- Guvenlik ----------------
 const unsigned long HEARTBEAT_ZAMAN_ASIMI_MS = 1000;
@@ -92,6 +97,10 @@ float burunServoAcisi = 0.0f;
 unsigned long sonServoKomutMs = 0;
 bool kanatKomutuAlindi = false;
 bool yuzeyServoCalisiyor = false;
+bool yuzeyServoTaramaAktif = false;
+uint16_t yuzeyTaramaUs = YUZEY_TARAMA_MIN_US;
+int8_t yuzeyTaramaYonu = 1;
+unsigned long sonYuzeyTaramaMs = 0;
 
 bool ateslemeIstegi = false;
 unsigned long ateslemeBaslangicMs = 0;
@@ -142,6 +151,7 @@ void motorNotr(MotorDurumu durum)
 
 void yuzeyServosunuDurdur()
 {
+  yuzeyServoTaramaAktif = false;
   pwm.writeMicroseconds(YUZEY_SERVO_KANALI, YUZEY_SERVO_DUR_US);
   yuzeyServoCalisiyor = false;
 }
@@ -315,11 +325,32 @@ void komutuIsle(char *komut)
       yuzeyServosunuDurdur();
       Serial.println("ERR,HEARTBEAT_REQUIRED");
     } else {
+      yuzeyServoTaramaAktif = false;
       pwm.writeMicroseconds(
           YUZEY_SERVO_KANALI, YUZEY_SERVO_CALIS_US);
       yuzeyServoCalisiyor = true;
       Serial.println("OK,SURFACE_SERVO_RUNNING");
     }
+    return;
+  }
+  if (strcmp(komut, "SURFACE_SWEEP_START") == 0) {
+    if (!heartbeatGuncel()) {
+      yuzeyServosunuDurdur();
+      Serial.println("ERR,HEARTBEAT_REQUIRED");
+    } else {
+      yuzeyTaramaUs = YUZEY_TARAMA_MIN_US;
+      yuzeyTaramaYonu = 1;
+      sonYuzeyTaramaMs = millis();
+      yuzeyServoTaramaAktif = true;
+      yuzeyServoCalisiyor = true;
+      pwm.writeMicroseconds(YUZEY_SERVO_KANALI, yuzeyTaramaUs);
+      Serial.println("OK,SURFACE_SWEEP_RUNNING");
+    }
+    return;
+  }
+  if (strcmp(komut, "SURFACE_SWEEP_STOP") == 0) {
+    yuzeyServosunuDurdur();
+    Serial.println("OK,SURFACE_SWEEP_STOPPED");
     return;
   }
   if (strcmp(komut, "SURFACE_STOP") == 0) {
@@ -418,6 +449,29 @@ void guvenligiGuncelle()
   digitalWrite(DURUM_LED_PINI, cikisAktif ? HIGH : LOW);
 }
 
+void yuzeyServoTaramasiniGuncelle()
+{
+  if (!yuzeyServoTaramaAktif) return;
+
+  unsigned long simdi = millis();
+  if (simdi - sonYuzeyTaramaMs < YUZEY_TARAMA_ARALIGI_MS) return;
+  sonYuzeyTaramaMs = simdi;
+
+  long sonrakiUs =
+      (long)yuzeyTaramaUs +
+      (long)yuzeyTaramaYonu * (long)YUZEY_TARAMA_ADIM_US;
+  if (sonrakiUs >= (long)YUZEY_TARAMA_MAX_US) {
+    sonrakiUs = YUZEY_TARAMA_MAX_US;
+    yuzeyTaramaYonu = -1;
+  } else if (sonrakiUs <= (long)YUZEY_TARAMA_MIN_US) {
+    sonrakiUs = YUZEY_TARAMA_MIN_US;
+    yuzeyTaramaYonu = 1;
+  }
+
+  yuzeyTaramaUs = (uint16_t)sonrakiUs;
+  pwm.writeMicroseconds(YUZEY_SERVO_KANALI, yuzeyTaramaUs);
+}
+
 void basinciOkuVeYayinla()
 {
   float gerilim = ortalamaSensorGerilimiOku(ORNEK_SAYISI);
@@ -452,6 +506,8 @@ void basinciOkuVeYayinla()
   Serial.print(burunServoAcisi, 1);
   Serial.print(",surface_running=");
   Serial.print(yuzeyServoCalisiyor ? 1 : 0);
+  Serial.print(",surface_sweep=");
+  Serial.print(yuzeyServoTaramaAktif ? 1 : 0);
   Serial.print(",ignition_active=");
   Serial.println(ateslemeIstegi ? 1 : 0);
 }
@@ -480,6 +536,7 @@ void loop()
 {
   seriKomutlariOku();
   motoruGuncelle();
+  yuzeyServoTaramasiniGuncelle();
   guvenligiGuncelle();
   basinciOkuVeYayinla();
 }
