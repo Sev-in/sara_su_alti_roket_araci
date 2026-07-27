@@ -33,6 +33,9 @@ DEFAULT_BY_ID = (
 )
 FALLBACK_PORT = '/dev/ttyUSB0'
 EXPECTED_READY = 'READY,SARA_UNO_CONTROLLER_V2'
+NON_FATAL_ERRORS = {
+    'ERR,SERVO_COMMAND_TIMEOUT_CENTERED',
+}
 
 
 def default_port():
@@ -103,6 +106,13 @@ def run_test(port, baud, ready_timeout_s, duration_s):
 
         send_command(uno, 'HB')
         time.sleep(0.05)
+        # Onceki ROS2/bench oturumundan kalabilecek kanat zaman asimini
+        # temizle ve CH5 disindaki tum kritik cikislari guvenli tut.
+        send_command(uno, 'MOTOR_DISARM')
+        send_command(uno, 'SERVO_CENTER')
+        send_command(uno, 'IGNITION=0')
+        send_command(uno, 'SURFACE_STOP')
+        time.sleep(0.05)
         send_command(uno, 'SURFACE_START')
         print(
             'CH5 calistirma komutu gonderildi. '
@@ -130,7 +140,13 @@ def run_test(port, baud, ready_timeout_s, duration_s):
                     if line == 'OK,SURFACE_SERVO_RUNNING':
                         confirmed = True
                     if line.startswith('ERR,'):
-                        raise RuntimeError(line)
+                        if line in NON_FATAL_ERRORS:
+                            print(
+                                f'UYARI (test devam ediyor): {line}',
+                                file=sys.stderr,
+                            )
+                        else:
+                            raise RuntimeError(line)
 
                 if not confirmed and now - start_time > 2.0:
                     print(
