@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Arduino Uno D9'a bagli siringa servosunu test eder.
+"""Arduino Uno D6'ya bagli siringa servosunu test eder.
 
 Bu program ROS2 kullanmaz. sara_uno_controller.ino seri protokoluyle
 uyumludur:
 
 * Uno READY olana kadar bekler.
 * Heartbeat'i 5 Hz gonderir.
-* SURFACE_SWEEP_START ile D9 servosunu 0-180 derece arasinda tarar.
+* SURFACE_SWEEP_START ile D6 servosunu 0-180 derece arasinda tarar.
 * Ctrl+C, sure dolumu veya hata halinde taramayi ve tum cikislari durdurur.
 
 actuator_driver veya Arduino Serial Monitor ayni anda calistirilmamalidir.
@@ -87,7 +87,7 @@ def wait_until_ready(connection, timeout_s):
 
 
 def stop_surface_servo(connection):
-    """D9 servosunu ve diger cikislari guvenli duruma getir."""
+    """D6 servosunu ve diger cikislari guvenli duruma getir."""
     try:
         send_command(connection, 'HB')
         send_command(connection, 'SURFACE_SWEEP_STOP')
@@ -98,7 +98,7 @@ def stop_surface_servo(connection):
 
 
 def run_test(port, baud, ready_timeout_s, duration_s):
-    """Seri baglantiyi ac ve D9 siringa servosu testini calistir."""
+    """Seri baglantiyi ac ve D6 siringa servosu testini calistir."""
     print(f'Uno aciliyor: {port} @ {baud}')
     with serial.Serial(port, baud, timeout=0.1, write_timeout=1.0) as uno:
         # Bazi Uno/FTDI baglantilari port acilinca karti yeniden baslatir.
@@ -108,7 +108,7 @@ def run_test(port, baud, ready_timeout_s, duration_s):
         send_command(uno, 'HB')
         time.sleep(0.05)
         # Onceki ROS2/bench oturumundan kalabilecek kanat zaman asimini
-        # temizle ve D9 servosu disindaki kritik cikislari guvenli tut.
+        # temizle ve D6 servosu disindaki kritik cikislari guvenli tut.
         send_command(uno, 'MOTOR_DISARM')
         send_command(uno, 'SERVO_CENTER')
         send_command(uno, 'IGNITION=0')
@@ -116,7 +116,7 @@ def run_test(port, baud, ready_timeout_s, duration_s):
         time.sleep(0.05)
         send_command(uno, 'SURFACE_SWEEP_START')
         print(
-            'Arduino D9 servosuna 0-180 derece tarama komutu gonderildi. '
+            'Arduino D6 servosuna 0-180 derece tarama komutu gonderildi. '
             'Durdurmak icin Ctrl+C kullan.'
         )
 
@@ -157,12 +157,12 @@ def run_test(port, baud, ready_timeout_s, duration_s):
                     confirmed = True
         finally:
             stop_surface_servo(uno)
-            print('D9 servosu durduruldu; Uno cikislari guvenli durumda.')
+            print('D6 servosu durduruldu; Uno cikislari guvenli durumda.')
 
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description='SARA Arduino Uno D9 siringa servosu testi'
+        description='SARA Arduino Uno D6 siringa servosu testi'
     )
     parser.add_argument(
         '--port',

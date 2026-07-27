@@ -43,7 +43,7 @@ def generate_launch_description():
         'enable_surface_servo',
         default_value='false',
         description=(
-            'Uno D9 siringa servosunu bench boyunca 0-180 derece tarar; '
+            'Uno D6 siringa servosunu bench boyunca 0-180 derece tarar; '
             'actuator_driver motoru ve ateslemeyi zorla kapali tutar'
         ),
     )

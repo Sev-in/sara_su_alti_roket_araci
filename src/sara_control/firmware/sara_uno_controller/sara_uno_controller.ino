@@ -10,10 +10,11 @@
  *   SEN0257 sari -> A0
  *   PCA9685 SDA/SCL -> A4/A5
  *   PCA9685 CH1 pitch, CH2 yaw, CH3 burun kapagi, CH4 ESC
- *   D9 -> siringa servosu SINYAL hatti
+ *   D6 -> siringa servosu SINYAL hatti
  *         (servo gucu harici 5-6 V kaynaktan, GND ortak)
- *   D2 -> fiziksel atesleme inhibit butonu (INPUT_PULLUP)
+ *   D2 -> yalniz olcum modu butonu (INPUT_PULLUP, basili=3 V)
  *   D7 -> LM2596 enable (aktif LOW varsayimi)
+ *   D8/D9/D10 -> X9C103S INC/U-D/CS
  *   USB serial -> Jetson Orin Nano, 115200 baud
  *
  * Jetson yalniz safety_node tarafindan onaylanmis komutlari yollar.
@@ -58,10 +59,10 @@ const uint16_t ESC_RAMP_ADIM_US = 20;
 const unsigned long ESC_RAMP_ARALIGI_MS = 100;
 const unsigned long ARM_BEKLEME_MS = 3000;
 
-// D9 siringa servosu. D9 yalnizca sinyal uretir; servo kesinlikle
+// D6 siringa servosu. D6 yalnizca sinyal uretir; servo kesinlikle
 // Uno 5 V pininden beslenmemelidir. Normal gorev komutlari korunur; yalnizca
 // SURFACE_SWEEP_START test komutu 0-180 derece arasinda tarama yapar.
-const uint8_t YUZEY_SERVO_PINI = 9;
+const uint8_t YUZEY_SERVO_PINI = 6;
 const uint16_t YUZEY_SERVO_DUR_US = 1500;
 const uint16_t YUZEY_SERVO_CALIS_US = 1700;
 const uint16_t YUZEY_TARAMA_MIN_US = SERVO_MIN_US;
@@ -73,8 +74,13 @@ const unsigned long YUZEY_TARAMA_ARALIGI_MS = 20;
 const unsigned long HEARTBEAT_ZAMAN_ASIMI_MS = 1000;
 const unsigned long SERVO_KOMUT_ZAMAN_ASIMI_MS = 500;
 const unsigned long ATESLEME_MAKS_SURE_MS = 1000;
-const uint8_t ATESLEME_INHIBIT_PINI = 2;
+const uint8_t ATESLEME_FIZIKSEL_PINI = 2;
 const uint8_t LM2596_ENABLE_PINI = 7;  // aktif LOW
+const uint8_t X9C_INC_PINI = 8;
+const uint8_t X9C_UD_PINI = 9;
+const uint8_t X9C_CS_PINI = 10;
+const int X9C_3V_ADIMI = 35;
+const bool ATESLEME_OLCUM_TEST_MODU = true;
 const uint8_t DURUM_LED_PINI = LED_BUILTIN;
 
 Adafruit_PWMServoDriver pwm(PCA9685_ADRESI);
@@ -109,6 +115,9 @@ unsigned long sonYuzeyTaramaMs = 0;
 
 bool ateslemeIstegi = false;
 unsigned long ateslemeBaslangicMs = 0;
+int x9cMevcutAdim = 99;
+bool ateslemeButonuBasili = false;
+bool ateslemeOlcumBirakmaBekliyor = true;
 
 float sifirSensorGerilimi = 0.0f;
 float filtreliSensorGerilimi = 0.0f;
@@ -166,6 +175,81 @@ void ateslemeyiKapat()
   ateslemeIstegi = false;
   digitalWrite(LM2596_ENABLE_PINI, HIGH);
   digitalWrite(DURUM_LED_PINI, LOW);
+  if (ATESLEME_OLCUM_TEST_MODU) {
+    // ALL_STOP veya benzeri bir kesmeden sonra buton birakilmadan
+    // cikisin yeniden acilmasina izin verme.
+    ateslemeOlcumBirakmaBekliyor = true;
+  }
+}
+
+void x9cKalibreEt()
+{
+  // LM2596 bu islem boyunca kapali kalir.
+  digitalWrite(LM2596_ENABLE_PINI, HIGH);
+  digitalWrite(X9C_UD_PINI, HIGH);
+  delayMicroseconds(5);
+  digitalWrite(X9C_CS_PINI, LOW);
+  delayMicroseconds(5);
+
+  for (int i = 0; i < 100; ++i) {
+    digitalWrite(X9C_INC_PINI, LOW);
+    delayMicroseconds(5);
+    digitalWrite(X9C_INC_PINI, HIGH);
+    delayMicroseconds(5);
+  }
+  digitalWrite(X9C_CS_PINI, HIGH);
+  x9cMevcutAdim = 99;
+}
+
+void x9cHedefAdimaGit(int hedefAdim)
+{
+  hedefAdim = constrain(hedefAdim, 0, 99);
+  if (hedefAdim == x9cMevcutAdim) return;
+
+  int fark = hedefAdim - x9cMevcutAdim;
+  if (fark > 0) {
+    digitalWrite(X9C_UD_PINI, HIGH);
+  } else {
+    digitalWrite(X9C_UD_PINI, LOW);
+    fark = -fark;
+  }
+
+  delayMicroseconds(5);
+  digitalWrite(X9C_CS_PINI, LOW);
+  delayMicroseconds(5);
+  for (int i = 0; i < fark; ++i) {
+    digitalWrite(X9C_INC_PINI, LOW);
+    delayMicroseconds(5);
+    digitalWrite(X9C_INC_PINI, HIGH);
+    delayMicroseconds(5);
+  }
+  digitalWrite(X9C_CS_PINI, HIGH);
+  x9cMevcutAdim = hedefAdim;
+}
+
+void ateslemeOlcumModunuGuncelle()
+{
+  ateslemeButonuBasili =
+      digitalRead(ATESLEME_FIZIKSEL_PINI) == LOW;
+
+  if (!ateslemeButonuBasili) {
+    ateslemeIstegi = false;
+    digitalWrite(LM2596_ENABLE_PINI, HIGH);
+    digitalWrite(DURUM_LED_PINI, LOW);
+    ateslemeOlcumBirakmaBekliyor = false;
+    return;
+  }
+
+  if (ateslemeOlcumBirakmaBekliyor) {
+    ateslemeIstegi = false;
+    digitalWrite(LM2596_ENABLE_PINI, HIGH);
+    digitalWrite(DURUM_LED_PINI, LOW);
+    return;
+  }
+
+  ateslemeIstegi = true;
+  digitalWrite(LM2596_ENABLE_PINI, LOW);
+  digitalWrite(DURUM_LED_PINI, HIGH);
 }
 
 void tumunuGuvenliDurdur()
@@ -274,11 +358,17 @@ void komutuIsle(char *komut)
     return;
   }
   if (komuttanFloatOku(komut, "IGNITION=", deger)) {
+    if (ATESLEME_OLCUM_TEST_MODU) {
+      // Olcum modunda cikisin tek sahibi fiziksel D2 butonudur.
+      // ROS komutu kabul edilir fakat D7 cikisini degistirmez.
+      Serial.println("OK,IGNITION_MEASUREMENT_MODE_D2");
+      return;
+    }
     if (deger >= 0.5f) {
       if (!heartbeatGuncel()) {
         ateslemeyiKapat();
         Serial.println("ERR,HEARTBEAT_REQUIRED");
-      } else if (digitalRead(ATESLEME_INHIBIT_PINI) == LOW) {
+      } else if (digitalRead(ATESLEME_FIZIKSEL_PINI) == LOW) {
         ateslemeyiKapat();
         Serial.println("ERR,IGNITION_PHYSICAL_INHIBIT");
       } else {
@@ -439,7 +529,12 @@ void guvenligiGuncelle()
     Serial.println("ERR,HEARTBEAT_LOST_SURFACE_STOPPED");
   }
 
-  bool fizikselInhibit = digitalRead(ATESLEME_INHIBIT_PINI) == LOW;
+  if (ATESLEME_OLCUM_TEST_MODU) {
+    ateslemeOlcumModunuGuncelle();
+    return;
+  }
+
+  bool fizikselInhibit = digitalRead(ATESLEME_FIZIKSEL_PINI) == LOW;
   bool ateslemeZamanAsimi =
       millis() - ateslemeBaslangicMs > ATESLEME_MAKS_SURE_MS;
   if (ateslemeIstegi &&
@@ -512,6 +607,10 @@ void basinciOkuVeYayinla()
   Serial.print(yuzeyServoCalisiyor ? 1 : 0);
   Serial.print(",surface_sweep=");
   Serial.print(yuzeyServoTaramaAktif ? 1 : 0);
+  Serial.print(",ignition_measurement_mode=");
+  Serial.print(ATESLEME_OLCUM_TEST_MODU ? 1 : 0);
+  Serial.print(",ignition_button_pressed=");
+  Serial.print(ateslemeButonuBasili ? 1 : 0);
   Serial.print(",ignition_active=");
   Serial.println(ateslemeIstegi ? 1 : 0);
 }
@@ -520,12 +619,23 @@ void setup()
 {
   pinMode(LM2596_ENABLE_PINI, OUTPUT);
   digitalWrite(LM2596_ENABLE_PINI, HIGH);
-  pinMode(ATESLEME_INHIBIT_PINI, INPUT_PULLUP);
+  pinMode(ATESLEME_FIZIKSEL_PINI, INPUT_PULLUP);
+  pinMode(X9C_INC_PINI, OUTPUT);
+  pinMode(X9C_UD_PINI, OUTPUT);
+  pinMode(X9C_CS_PINI, OUTPUT);
+  digitalWrite(X9C_INC_PINI, HIGH);
+  digitalWrite(X9C_UD_PINI, HIGH);
+  digitalWrite(X9C_CS_PINI, HIGH);
   pinMode(DURUM_LED_PINI, OUTPUT);
   digitalWrite(DURUM_LED_PINI, LOW);
   pinMode(BASINC_PINI, INPUT);
 
   Serial.begin(115200);
+  if (ATESLEME_OLCUM_TEST_MODU) {
+    x9cKalibreEt();
+    x9cHedefAdimaGit(X9C_3V_ADIMI);
+    Serial.println("INFO,IGNITION_MEASUREMENT_MODE_D2_READY");
+  }
   Wire.begin();
   pwm.begin();
   pwm.setPWMFreq(50);

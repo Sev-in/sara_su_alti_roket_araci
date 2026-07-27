@@ -169,6 +169,9 @@ class ActuatorDriverNode(Node):
         self._surface_sweep_confirmed = False
         self._ignition_commanded = False
         self._ignition_confirmed = False
+        self._ignition_output_active = False
+        self._ignition_measurement_mode = False
+        self._ignition_button_pressed = False
 
         self._connect()
 
@@ -187,7 +190,7 @@ class ActuatorDriverNode(Node):
             'Yalnizca safety_node *_command ciktilari uygulanir.')
         if self.surface_servo_test_mode:
             self.get_logger().warning(
-                'D9 SIRINGA TEST MODU ETKIN: Uno D9 servosu 0-180 derece '
+                'D6 SIRINGA TEST MODU ETKIN: Uno D6 servosu 0-180 derece '
                 'surekli tarama yapacak; '
                 'motor ve atesleme actuator_driver tarafinda zorla '
                 'guvenli tutulacak.')
@@ -237,6 +240,9 @@ class ActuatorDriverNode(Node):
         self._surface_sweep_confirmed = False
         self._ignition_commanded = False
         self._ignition_confirmed = False
+        self._ignition_output_active = False
+        self._ignition_measurement_mode = False
+        self._ignition_button_pressed = False
         self._uno_ready = False
         self._uno_ready_deadline = math.inf
         self._ready_timeout_reported = False
@@ -461,6 +467,9 @@ class ActuatorDriverNode(Node):
             self._surface_sweep_confirmed = False
             self._ignition_commanded = False
             self._ignition_confirmed = False
+            self._ignition_output_active = False
+            self._ignition_measurement_mode = False
+            self._ignition_button_pressed = False
             self._motor_state = 'READY'
             self._last_error = '-'
             self._write('HB')
@@ -534,11 +543,29 @@ class ActuatorDriverNode(Node):
                     int(values['surface_sweep']) == 1)
             except (TypeError, ValueError, OverflowError):
                 self._surface_sweep_confirmed = False
+        if 'ignition_measurement_mode' in values:
+            try:
+                self._ignition_measurement_mode = (
+                    int(values['ignition_measurement_mode']) == 1)
+            except (TypeError, ValueError, OverflowError):
+                self._ignition_measurement_mode = False
+        if 'ignition_button_pressed' in values:
+            try:
+                self._ignition_button_pressed = (
+                    int(values['ignition_button_pressed']) == 1)
+            except (TypeError, ValueError, OverflowError):
+                self._ignition_button_pressed = False
         if 'ignition_active' in values:
             try:
-                self._ignition_confirmed = (
+                self._ignition_output_active = (
                     int(values['ignition_active']) == 1)
+                # D2 ile yapilan 3 V olcum testi gercek atesleme onayi
+                # sayilmaz ve Gorev 2'yi tamamlamaz.
+                self._ignition_confirmed = (
+                    self._ignition_output_active
+                    and not self._ignition_measurement_mode)
             except (TypeError, ValueError, OverflowError):
+                self._ignition_output_active = False
                 self._ignition_confirmed = False
         if 'pressure_kpa' not in values:
             return
@@ -600,7 +627,7 @@ class ActuatorDriverNode(Node):
             status.message = 'Uno seri baglanti/basinc telemetrisi hazir degil'
         elif self.surface_servo_test_mode:
             status.level = DiagnosticStatus.WARN
-            status.message = 'D9 0-180 derece siringa tarama testi etkin'
+            status.message = 'D6 0-180 derece siringa tarama testi etkin'
         else:
             status.level = DiagnosticStatus.OK
             status.message = 'Nominal'
@@ -641,6 +668,15 @@ class ActuatorDriverNode(Node):
             KeyValue(
                 key='ignition_active',
                 value=str(self._ignition_confirmed)),
+            KeyValue(
+                key='ignition_output_active',
+                value=str(self._ignition_output_active)),
+            KeyValue(
+                key='ignition_measurement_mode',
+                value=str(self._ignition_measurement_mode)),
+            KeyValue(
+                key='ignition_button_pressed',
+                value=str(self._ignition_button_pressed)),
             KeyValue(
                 key='ignition_commanded',
                 value=str(self._ignition_commanded)),

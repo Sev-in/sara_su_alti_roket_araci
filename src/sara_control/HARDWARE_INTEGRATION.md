@@ -8,8 +8,11 @@
 - Arduino Uno -> Jetson `/dev/ttyUSB0`, 115200 baud
 - SEN0257 -> Uno A0
 - PCA9685 -> Uno A4/A5
-- Siringa servosu sinyal -> Uno D9
+- Siringa servosu sinyal -> Uno D6
 - Siringa servosu guc -> harici regule 5-6 V (Uno ile ortak GND)
+- X9C103S INC/U-D/CS -> Uno D8/D9/D10
+- LM2596 enable -> Uno D7 (aktif LOW)
+- Olcum modu butonu -> Uno D2 ile GND arasinda (INPUT_PULLUP)
 
 Bir fiziksel kaynagi yalniz bir node acar. Uno seri portunun tek sahibi
 `actuator_driver`; SEN0257 telemetrisini de bu node yayinlar.
@@ -24,8 +27,20 @@ Bir fiziksel kaynagi yalniz bir node acar. Uno seri portunun tek sahibi
 | CH4 | Cift yonlu ESC |
 
 PCA9685 CH5 kullanilmaz. Siringa/yuzeye cikis servosunun yalnizca
-sinyal kablosu Uno D9'a baglanir. Servo Uno 5 V pininden beslenmez;
+sinyal kablosu Uno D6'ya baglanir. Servo Uno 5 V pininden beslenmez;
 harici servo beslemesinin GND hatti Uno GND ile ortaklanir.
+
+## Atesleme cikisi olcum modu
+
+Firmware su anda `ATESLEME_OLCUM_TEST_MODU=true` ile derlenir. Bu modda
+gercek atesleyici baglanmaz ve ROS `IGNITION` komutlari D7 cikisini
+degistiremez. Acilista D7 HIGH tutularak LM2596 kapatilir; X9C103S once
+kalibre edilir, sonra `X9C_3V_ADIMI=35` konumuna getirilir.
+
+D2 butonu birakildiginda D7 HIGH ve cikis 0 V; D2 butonu basiliyken
+D7 LOW ve hedef cikis 3 V'tur. `ALL_STOP` sonrasinda buton
+birakilip yeniden basilana kadar cikis tekrar acilmaz. Bu test yalnizca
+multimetre/uygun olcum yuku ile yapilmalidir.
 
 ## ROS veri yolu
 

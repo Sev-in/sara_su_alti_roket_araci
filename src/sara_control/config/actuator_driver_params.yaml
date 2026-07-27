@@ -27,7 +27,7 @@ actuator_driver:
     # Autopilot yuzeye cikis icin negatif sephiye komutu uretir.
     buoyancy_surface_threshold: -0.05
     # Bench'te enable_surface_servo:=true veya sara_system.launch.py'de
-    # surface_servo_test_mode:=true ile Uno D9 servosu 0-180 derece tarar.
+    # surface_servo_test_mode:=true ile Uno D6 servosu 0-180 derece tarar.
     # Normal gorevde kesinlikle false kalmalidir.
     surface_servo_test_mode: false
 
