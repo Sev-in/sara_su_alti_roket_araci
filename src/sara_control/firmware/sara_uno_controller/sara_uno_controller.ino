@@ -45,11 +45,13 @@ const float KANAT_SERVO_MAX_DERECE = 135.0f;
 
 // 45A cift yonlu sualti ESC:
 //   1500 us = arm/dur
-//   1500..2000 us = cekme yonu
-//   1500..1000 us = istenen itme yonu
-// Aracin ileri itisi icin 1000 us tarafi kullanilir.
+//   +1 = 1500..2000 us yonu (aracta dogrulanan itme yonu)
+//   -1 = 1500..1000 us yonu (aracta dogrulanan cekme yonu)
 const uint16_t ESC_NOTR_US = 1500;
-const uint16_t ESC_TAM_ITKI_US = 1000;
+const int8_t ESC_ITME_YONU = +1;
+const uint16_t ESC_TAM_ITKI_FARK_US = 500;
+const uint16_t ESC_MUTLAK_MIN_US = 1000;
+const uint16_t ESC_MUTLAK_MAX_US = 2000;
 const uint16_t ESC_RAMP_ADIM_US = 20;
 const unsigned long ESC_RAMP_ARALIGI_MS = 100;
 const unsigned long ARM_BEKLEME_MS = 3000;
@@ -213,9 +215,16 @@ void itkiKomutunuUygula(float normalizeItki)
     Serial.println("ERR,MOTOR_NOT_ARMED");
     return;
   }
-  hedefEscUs = (uint16_t)(
-      ESC_NOTR_US +
-      normalizeItki * (float)(ESC_TAM_ITKI_US - ESC_NOTR_US));
+  // Yon isaretli tutulur; bu sayede -500 us hesabi Uno'da uint16_t
+  // tasmasina donusmez. Sonuc ayrıca ESC'nin guvenli araliginda sinirlanir.
+  const float escAralikUs =
+      (float)ESC_ITME_YONU * (float)ESC_TAM_ITKI_FARK_US;
+  const long hesaplananEscUs = lroundf(
+      (float)ESC_NOTR_US + normalizeItki * escAralikUs);
+  hedefEscUs = (uint16_t)constrain(
+      hesaplananEscUs,
+      (long)ESC_MUTLAK_MIN_US,
+      (long)ESC_MUTLAK_MAX_US);
   motorDurumu = MOTOR_RUNNING;
 }
 

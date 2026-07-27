@@ -59,6 +59,7 @@ class ActuatorDriverNode(Node):
         self.declare_parameter('nose_closed_deg', 0.0)
         self.declare_parameter('nose_open_deg', 90.0)
         self.declare_parameter('buoyancy_surface_threshold', -0.05)
+        self.declare_parameter('surface_servo_test_mode', False)
 
         self.declare_parameter('surface_reference_pa', 101325.0)
         self.declare_parameter('pressure_variance_pa2', 0.0)
@@ -88,6 +89,8 @@ class ActuatorDriverNode(Node):
             self.get_parameter('nose_open_deg').value)
         self.surface_threshold = float(
             self.get_parameter('buoyancy_surface_threshold').value)
+        self.surface_servo_test_mode = bool(
+            self.get_parameter('surface_servo_test_mode').value)
 
         self.surface_reference = float(
             self.get_parameter('surface_reference_pa').value)
@@ -180,6 +183,11 @@ class ActuatorDriverNode(Node):
         self.get_logger().info(
             f'actuator_driver baslatildi: Uno={self.port}@{self.baud}. '
             'Yalnizca safety_node *_command ciktilari uygulanir.')
+        if self.surface_servo_test_mode:
+            self.get_logger().warning(
+                'CH5 SIRINGA TEST MODU ETKIN: CH5 surekli calisacak; '
+                'motor, kanat hareketi, burun kapagi ve atesleme '
+                'actuator_driver tarafinda zorla guvenli tutulacak.')
 
     def _connect(self):
         self._last_connect_attempt = time.monotonic()
@@ -328,23 +336,25 @@ class ActuatorDriverNode(Node):
         # hareket degildir; safety thrust_command=0 tuttugu icin 60 sn
         # inhibit korunur. Boylece izin aninda 3 sn ESC beklemesi Gorev 2
         # yarismasinin 60 sn sayacindan yenmez.
-        if not self._motor_armed:
+        if not self.surface_servo_test_mode and not self._motor_armed:
             if not self._arm_requested:
                 self._write('MOTOR_ARM')
                 self._arm_requested = True
 
         thrust = self._thrust if (
+            not self.surface_servo_test_mode
+            and
             self._motion_permission and self._motor_armed) else 0.0
         self._write(f'THRUST={thrust:.3f}')
 
         pitch_deg = normalized_fin_to_servo(
-            self._fin.x,
+            0.0 if self.surface_servo_test_mode else self._fin.x,
             self.servo_center,
             self.pitch_max_offset,
             self.pitch_sign,
         )
         yaw_deg = normalized_fin_to_servo(
-            self._fin.y,
+            0.0 if self.surface_servo_test_mode else self._fin.y,
             self.servo_center,
             self.yaw_max_offset,
             self.yaw_sign,
@@ -356,15 +366,22 @@ class ActuatorDriverNode(Node):
             self.nose_open if self._nose_open_request
             else self.nose_closed
         )
+        if self.surface_servo_test_mode:
+            nose_deg = self.nose_closed
         self._write(f'NOSE={nose_deg:.1f}')
 
-        surface_requested = self._buoyancy < self.surface_threshold
+        surface_requested = (
+            self.surface_servo_test_mode
+            or self._buoyancy < self.surface_threshold
+        )
         if surface_requested != self._surface_running:
             self._write(
                 'SURFACE_START' if surface_requested else 'SURFACE_STOP')
             self._surface_running = surface_requested
 
         ignition_requested = (
+            not self.surface_servo_test_mode
+            and
             self._launch_request
             and self._motion_permission
             and not self._emergency_stop
@@ -555,16 +572,19 @@ class ActuatorDriverNode(Node):
         status = DiagnosticStatus()
         status.name = 'sara_actuator_driver'
         status.hardware_id = 'arduino_uno_pca9685'
-        status.level = (
-            DiagnosticStatus.OK
-            if serial_ok and pressure_fresh
-            else DiagnosticStatus.ERROR
-        )
-        status.message = (
-            'Nominal' if status.level == DiagnosticStatus.OK
-            else 'Uno seri baglanti/basinc telemetrisi hazir degil'
-        )
+        if not serial_ok or not pressure_fresh:
+            status.level = DiagnosticStatus.ERROR
+            status.message = 'Uno seri baglanti/basinc telemetrisi hazir degil'
+        elif self.surface_servo_test_mode:
+            status.level = DiagnosticStatus.WARN
+            status.message = 'CH5 surekli siringa test modu etkin'
+        else:
+            status.level = DiagnosticStatus.OK
+            status.message = 'Nominal'
         status.values = [
+            KeyValue(
+                key='surface_servo_test_mode',
+                value=str(self.surface_servo_test_mode)),
             KeyValue(key='serial_ready', value=str(serial_ok)),
             KeyValue(
                 key='serial_rx_age_s',

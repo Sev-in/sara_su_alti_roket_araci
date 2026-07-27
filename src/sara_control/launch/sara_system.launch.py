@@ -141,6 +141,14 @@ def generate_launch_description():
             'baslat; false ise start_command bekle'
         )
     )
+    surface_servo_test_arg = DeclareLaunchArgument(
+        'surface_servo_test_mode', default_value='false',
+        description=(
+            'SADECE TEZGAH TESTI: CH5 siringa servosunu heartbeat boyunca '
+            'surekli calistirir; motor, kanatlar, burun kapagi ve atesleme '
+            'actuator_driver tarafinda zorla guvenli tutulur'
+        )
+    )
     start_mavros_arg = DeclareLaunchArgument(
         'start_mavros', default_value='true',
         description=(
@@ -163,6 +171,8 @@ def generate_launch_description():
     log_directory = LaunchConfiguration('log_directory')
     motor_inhibit_duration_s = LaunchConfiguration('motor_inhibit_duration_s')
     auto_start = LaunchConfiguration('auto_start')
+    surface_servo_test_mode = LaunchConfiguration(
+        'surface_servo_test_mode')
     start_mavros = LaunchConfiguration('start_mavros')
     fcu_url = LaunchConfiguration('fcu_url')
 
@@ -210,6 +220,10 @@ def generate_launch_description():
         output='screen',
         parameters=[
             os.path.join(config_dir, 'actuator_driver_params.yaml'),
+            {
+                'surface_servo_test_mode': ParameterValue(
+                    surface_servo_test_mode, value_type=bool)
+            },
         ],
         condition=IfCondition(is_hardware_mode),
     )
@@ -296,6 +310,7 @@ def generate_launch_description():
         log_directory_arg,
         motor_inhibit_arg,
         auto_start_arg,
+        surface_servo_test_arg,
         start_mavros_arg,
         fcu_url_arg,
 

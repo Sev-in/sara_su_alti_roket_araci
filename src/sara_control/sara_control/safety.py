@@ -33,6 +33,9 @@ Girdi (istekler + guvenlik sinyalleri):
     /sara/navigation/status                (diagnostic_msgs/DiagnosticStatus)
     /sara/safety/emergency_stop            (std_msgs/Bool)
     /sara/safety/leak_detected             (std_msgs/Bool)
+    /sara/operator/controlled_motor_stop   (std_msgs/Bool)          -- ESC'yi
+                                                                    rampayla
+                                                                    notrler
 
 Cikti (NIHAI komutlar - Pixhawk/MAVROS koprusu SADECE bunlari dinlemeli):
     /sara/control/thrust_command      (std_msgs/Float64)
@@ -142,6 +145,7 @@ class SafetyNode(Node):
 
         self._emergency_stop = False
         self._leak_detected = False
+        self._controlled_motor_stop = False
 
         self._nose_cap_command_latched = False
         self._was_launch_command = False
@@ -171,6 +175,12 @@ class SafetyNode(Node):
         self.create_subscription(DiagnosticStatus, '/sara/navigation/status', self._on_nav_status, 10)
         self.create_subscription(Bool, '/sara/safety/emergency_stop', self._on_emergency_stop, 10)
         self.create_subscription(Bool, '/sara/safety/leak_detected', self._on_leak, 10)
+        self.create_subscription(
+            Bool,
+            '/sara/operator/controlled_motor_stop',
+            self._on_controlled_motor_stop,
+            10,
+        )
 
         self._thrust_cmd_pub = self.create_publisher(Float64, '/sara/control/thrust_command', 10)
         self._fin_cmd_pub = self.create_publisher(Vector3, '/sara/control/fin_command', 10)
@@ -267,6 +277,16 @@ class SafetyNode(Node):
     def _on_leak(self, msg: Bool):
         self._leak_detected = msg.data
 
+    def _on_controlled_motor_stop(self, msg: Bool):
+        self._controlled_motor_stop = bool(msg.data)
+        if self._controlled_motor_stop:
+            self.get_logger().warning(
+                'Operator kontrollu motor durdurma etkin: '
+                'thrust_command=0, ESC Uno rampasiyla notre donecek.')
+        else:
+            self.get_logger().info(
+                'Operator kontrollu motor durdurma kaldirildi.')
+
     def _nav_ok(self) -> bool:
         if self._last_nav_status_time is None:
             return False
@@ -322,6 +342,9 @@ class SafetyNode(Node):
         if core_safe and not self._motion_permission:
             block_reasons.append('hareket_izni_yok(60sn_inhibit)')
         thrust_command = self._thrust_request if thrust_ok else 0.0
+        if self._controlled_motor_stop:
+            thrust_command = 0.0
+            block_reasons.append('operator_kontrollu_motor_durdurma')
 
         if core_safe and self._request_fresh(self._last_fin_req_time):
             fin_command = self._fin_request
@@ -361,6 +384,8 @@ class SafetyNode(Node):
             'pitch_yeterli': self._pitch >= self.launch_min_pitch,
         }
         launch_command = all(launch_conditions.values())
+        if self._controlled_motor_stop:
+            launch_command = False
         if not launch_command and self._launch_request:
             failed = [k for k, v in launch_conditions.items() if not v]
             block_reasons.append('firlatma_bloklandi:' + ','.join(failed))
@@ -430,6 +455,9 @@ class SafetyNode(Node):
             KeyValue(key='task_complete', value=str(self._task_complete)),
             KeyValue(key='main_power_cutoff_command', value=str(self._task_complete)),
             KeyValue(key='thrust_command', value=f'{thrust_cmd:.2f}'),
+            KeyValue(
+                key='controlled_motor_stop',
+                value=str(self._controlled_motor_stop)),
             KeyValue(key='buoyancy_command', value=f'{buoyancy_cmd:.2f}'),
             KeyValue(key='nose_cap_command', value=str(nose_cap_cmd)),
             KeyValue(key='launch_command', value=str(launch_cmd)),

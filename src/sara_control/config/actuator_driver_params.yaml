@@ -26,6 +26,9 @@ actuator_driver:
 
     # Autopilot yuzeye cikis icin negatif sephiye komutu uretir.
     buoyancy_surface_threshold: -0.05
+    # Yalnizca sara_system.launch.py surface_servo_test_mode:=true ile
+    # gecici tezgahta acilir. Normal gorevde kesinlikle false kalmalidir.
+    surface_servo_test_mode: false
 
     # Uno, acilista aldigi sifira gore gauge kPa yollar. ROS mesajina
     # donusurken bu yuzey referansi eklenir; navigation.py yine kendi
