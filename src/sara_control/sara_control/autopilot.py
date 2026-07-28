@@ -435,10 +435,16 @@ class AutopilotNode(Node):
 
             # --- Sephiye/siringa ---
             # Normal dalis, seyir ve donus pervane + hidrodinamik kontrol
-            # yuzeyleriyle yapilir. Siringa Gorev 1 sonunda yuzeye cikmak
-            # icin ayrilmistir.
+            # yuzeyleriyle yapilir. Siringa yalnizca gercek yuzeye cikis
+            # fazlarinda etkindir:
+            #   - Gorev 1: bitis alaninda dikey yuzeye cikis
+            #   - Gorev 2: 30 m guvenli bolgeden +35 derece tirmanis
+            # Gorev 2 aci/yuzey dogrulamasina gecince siringa durur;
+            # burun kapagi ve atesleme fazlarinda yeniden calismaz.
             buoyancy_allowed = self._mission_phase in (
                 'G1_YUZEYE_CIKIS',
+                'G2_GUVENLI_ATIS_BOLGESI',
+                'G2_TIRMANIS_35_DERECE',
                 'GUVENLI_SONLANDIRMA',
             )
             if buoyancy_allowed:

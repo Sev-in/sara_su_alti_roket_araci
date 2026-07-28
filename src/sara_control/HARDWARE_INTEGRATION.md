@@ -33,6 +33,9 @@ Yuzeye cikis komutu aktifken D6 sinyali 500 ms boyunca 1200 us, sonra
 200 ms boyunca 1500 us notr olacak sekilde kesintisiz tekrarlar.
 Heartbeat kaybi, `SURFACE_STOP` veya `ALL_STOP` servoyu 1500 us notr
 konumuna getirir.
+Bu davranis bench testinde, Gorev 1 `G1_YUZEYE_CIKIS` fazinda ve Gorev 2
+`G2_GUVENLI_ATIS_BOLGESI`/`G2_TIRMANIS_35_DERECE` fazlarinda etkindir.
+Gorev 2 aci-yuzey dogrulamasina gecildiginde servo durdurulur.
 
 ## Atesleme cikisi olcum modu
 

@@ -26,8 +26,9 @@ autopilot_node:
     fin_yaw_limit: 1.0                # normalize [-1,1]
 
     # --- Sephiye dongusu (step motor/siringa) ---
-    # Yalnizca G1_YUZEYE_CIKIS ve guvenli sonlandirma fazlarinda etkindir;
-    # normal dalis ve seyir pervane + kanatciklarla yapilir.
+    # Yalnizca G1_YUZEYE_CIKIS, G2_GUVENLI_ATIS_BOLGESI,
+    # G2_TIRMANIS_35_DERECE ve guvenli sonlandirma fazlarinda etkindir.
+    # Normal dalis ve seyir pervane + kanatciklarla yapilir.
     buoyancy_kp: 0.15
     buoyancy_ki: 0.01
     buoyancy_limit: 1.0               # normalize [-1,1]
