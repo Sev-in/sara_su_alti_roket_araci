@@ -10,6 +10,7 @@
 - PCA9685 -> Uno A4/A5
 - Siringa servosu sinyal -> Uno D6
 - Siringa servosu guc -> harici regule 5-6 V (Uno ile ortak GND)
+- Ana guc kesme karti kontrol -> Uno D5 (`LOW=enerji var`, `HIGH=kes`)
 - X9C103S INC/U-D/CS -> Uno D8/D9/D10
 - LM2596 enable -> Uno D7 (aktif LOW)
 - Olcum modu butonu -> Uno D2 ile GND arasinda (INPUT_PULLUP)
@@ -66,6 +67,44 @@ Filtre zinciri korunur:
 
 Standalone `PixhawkUnoServoNode` ayni anda calistirilmamalidir; IMU'dan
 dogrudan servo urettigi icin autopilot ve safety katmanlarini baypas eder.
+
+## Ana guc kesme
+
+`guidance_node`, Gorev 1/Gorev 2 normal tamamlanmasinda veya
+`GUVENLI_SONLANDIRMA` durumunda `task_complete=True` yayinlar.
+`safety_node` bunu geri alinamayan
+`/sara/safety/main_power_cutoff_command=True` kilidine cevirir.
+`actuator_driver`, Uno'ya bir kez `POWER_CUTOFF` yollar. Uno once ESC'yi
+notre alir, kanatlari merkezler, siringayi ve ateslemeyi durdurur; sonra
+D5'i HIGH yapip yazilimsal olarak kilitler. Ayni calisma oturumunda hicbir
+seri komut D5'i tekrar LOW yapamaz.
+
+D5 cikisinda acilis/reset sirasinda kararsiz seviye olusmamasi icin guc
+kesme kartinin girisinde uygun bir harici pull-down kullanilmalidir.
+Yazilim kilidi Uno resetlenince temizlenir; resetten sonra da kesik
+kalmasi isteniyorsa kart donanimsal mandallama icermelidir.
+
+Tum sistem tezgah testinde guc kesme varsayilan olarak kapalidir. Test
+yalniz guvenli olcum yuku ile su sekilde yetkilendirilir:
+
+```bash
+ros2 launch sara_control imu_actuator_bench.launch.py \
+  enable_motor:=false \
+  enable_surface_servo:=true \
+  enable_power_cutoff_test:=true \
+  confirm_power_cutoff_test_safe:=true
+```
+
+Tum sensor ve servo kontrolleri bittikten sonra testin son adimi:
+
+```bash
+ros2 topic pub --once /sara/bench/power_cutoff_request \
+  std_msgs/msg/Bool "{data: true}"
+```
+
+Bu komut geri alinamaz; bench hareket isteklerini sifirlar,
+`task_complete=True` yayinlar ve normal safety/actuator_driver/Uno
+zinciri D5'i HIGH yapar.
 
 ## Jetson gereksinimleri
 

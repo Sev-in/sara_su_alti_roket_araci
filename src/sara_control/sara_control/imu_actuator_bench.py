@@ -9,7 +9,9 @@ Servo davranisi, sahada iyi calistigi bildirilen standalone kodla aynidir:
 
 Bu dugum donanimi dogrudan surmez. Normalize komutlar yine
 safety -> actuator_driver -> Uno/PCA9685 zincirinden gecer. Burun kapagi,
-siringa ve atesleme her dongude kapali tutulur.
+siringa ve atesleme her dongude kapali tutulur. Istege bagli ana guc
+kesme testi, iki ayri parametre onayindan sonra
+``/sara/bench/power_cutoff_request=True`` ile son adim olarak tetiklenir.
 """
 
 import math
@@ -62,6 +64,9 @@ class ImuActuatorBench(Node):
         self.declare_parameter('motor_test_speed_ms', 0.15)
         self.declare_parameter('max_motor_test_speed_ms', 0.70)
         self.declare_parameter('max_calibrated_speed_ms', 1.076)
+        self.declare_parameter('enable_power_cutoff_test', False)
+        self.declare_parameter(
+            'confirm_power_cutoff_test_safe', False)
         self.declare_parameter('pitch_max_angle_deg', 35.0)
         self.declare_parameter('yaw_max_angle_deg', 35.0)
         self.declare_parameter('gain', 1.0)
@@ -94,6 +99,14 @@ class ImuActuatorBench(Node):
         )
         self._thrust_request = clamp(
             self._motor_speed / calibrated_speed, 0.0, 1.0)
+        power_cutoff_enabled = bool(
+            self.get_parameter('enable_power_cutoff_test').value)
+        power_cutoff_confirmed = bool(
+            self.get_parameter(
+                'confirm_power_cutoff_test_safe').value)
+        self._power_cutoff_test_enabled = (
+            power_cutoff_enabled and power_cutoff_confirmed)
+        self._power_cutoff_requested = False
 
         self._pitch_max = max(
             1e-6, float(self.get_parameter('pitch_max_angle_deg').value))
@@ -140,6 +153,12 @@ class ImuActuatorBench(Node):
             Bool, '/sara/water_detect_1', self._on_water_1, sensor_qos)
         self.create_subscription(
             Bool, '/sara/water_detect_2', self._on_water_2, sensor_qos)
+        self.create_subscription(
+            Bool,
+            '/sara/bench/power_cutoff_request',
+            self._on_power_cutoff_request,
+            10,
+        )
 
         self._thrust_pub = self.create_publisher(
             Float64, '/sara/control/thrust_request', 10)
@@ -171,6 +190,16 @@ class ImuActuatorBench(Node):
                 f'BENCH MOTOR TESTI ETKIN: hedef hiz={self._motor_speed:.3f} '
                 'm/s. Pervane sokulmus veya arac guvenli duzenekte '
                 'sabitlenmis olmalidir.')
+        if power_cutoff_enabled and not power_cutoff_confirmed:
+            self.get_logger().warn(
+                'Ana guc kesme testi istendi ancak '
+                'confirm_power_cutoff_test_safe=False; D5 kesme istegi '
+                'yok sayilacak.')
+        if self._power_cutoff_test_enabled:
+            self.get_logger().error(
+                'ANA GUC KESME TESTI HAZIR: Tum kontroller bittikten sonra '
+                '/sara/bench/power_cutoff_request=True gonderildiginde '
+                'D5 HIGH kilitlenecek ve test sona erecek.')
         self.get_logger().info(
             'Standalone ile uyumlu servo modu: CH1=pitch +-'
             f'{self._pitch_max:.0f} deg, CH2=baskin roll/yaw +-'
@@ -196,6 +225,20 @@ class ImuActuatorBench(Node):
         if stable is not None:
             self._water_2 = stable
         self._last_water_2_time = now
+
+    def _on_power_cutoff_request(self, msg):
+        if not msg.data or self._power_cutoff_requested:
+            return
+        if not self._power_cutoff_test_enabled:
+            self.get_logger().error(
+                'Ana guc kesme istegi REDDEDILDI: launch sirasinda '
+                'enable_power_cutoff_test:=true ve '
+                'confirm_power_cutoff_test_safe:=true verilmelidir.')
+            return
+        self._power_cutoff_requested = True
+        self.get_logger().error(
+            'ANA GUC KESME TESTI TETIKLENDI: hareket istekleri '
+            'sifirlaniyor ve task_complete=True yayinlaniyor.')
 
     def _on_odom(self, msg):
         self._last_odom_time = self.get_clock().now()
@@ -275,23 +318,37 @@ class ImuActuatorBench(Node):
         disabled = Bool()
         disabled.data = False
         self._launch_pub.publish(disabled)
-        self._complete_pub.publish(disabled)
 
-        nose_open = self._nose_open_from_water()
+        complete = Bool()
+        complete.data = self._power_cutoff_requested
+        self._complete_pub.publish(complete)
+
+        nose_open = (
+            False
+            if self._power_cutoff_requested
+            else self._nose_open_from_water()
+        )
         cap = Bool()
         cap.data = nose_open
         self._cap_pub.publish(cap)
 
         permitted = Bool()
-        permitted.data = bool(ready and self._motor_enabled)
+        permitted.data = bool(
+            ready
+            and self._motor_enabled
+            and not self._power_cutoff_requested)
         self._permission_pub.publish(permitted)
 
         thrust = Float64()
-        thrust.data = self._thrust_request if ready else 0.0
+        thrust.data = (
+            self._thrust_request
+            if ready and not self._power_cutoff_requested
+            else 0.0
+        )
         self._thrust_pub.publish(thrust)
 
         fin = Vector3()
-        if ready:
+        if ready and not self._power_cutoff_requested:
             # Bench launch actuator_driver sign'larini +1 yapar. Bu nedenle
             # normalize deger, standalone koddaki fiziksel offseti korur.
             fin.x = self._pitch_offset / self._pitch_max
@@ -306,9 +363,23 @@ class ImuActuatorBench(Node):
         status.name = 'sara_imu_actuator_bench'
         status.hardware_id = 'pixhawk_uno_pca9685'
         status.level = (
-            DiagnosticStatus.OK if ready else DiagnosticStatus.WARN)
+            DiagnosticStatus.WARN
+            if self._power_cutoff_requested
+            else (
+                DiagnosticStatus.OK
+                if ready
+                else DiagnosticStatus.WARN
+            )
+        )
         status.message = (
-            'Nominal' if ready else 'Pixhawk/IMU referansi bekleniyor')
+            'Ana guc kesme istendi; test sonlandiriliyor'
+            if self._power_cutoff_requested
+            else (
+                'Nominal'
+                if ready
+                else 'Pixhawk/IMU referansi bekleniyor'
+            )
+        )
         status.values = [
             KeyValue(key='imu_ready', value=str(ready)),
             KeyValue(
@@ -332,6 +403,12 @@ class ImuActuatorBench(Node):
             KeyValue(
                 key='ch3_nose_open',
                 value=str(nose_open)),
+            KeyValue(
+                key='power_cutoff_test_enabled',
+                value=str(self._power_cutoff_test_enabled)),
+            KeyValue(
+                key='power_cutoff_requested',
+                value=str(self._power_cutoff_requested)),
         ]
         self._status_pub.publish(status)
 

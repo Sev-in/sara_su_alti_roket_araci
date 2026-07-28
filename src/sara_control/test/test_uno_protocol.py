@@ -14,10 +14,12 @@ class UnoProtocolTests(unittest.TestCase):
     def test_telemetry_parser(self):
         values = parse_telemetry_line(
             'voltage_v=0.750000,pressure_kpa=9.807,'
-            'motor_state=4,heartbeat_ok=1,ignition_active=1')
+            'motor_state=4,heartbeat_ok=1,ignition_active=1,'
+            'power_cutoff_latched=1')
         self.assertAlmostEqual(values['pressure_kpa'], 9.807)
         self.assertEqual(values['motor_state'], 4.0)
         self.assertEqual(values['ignition_active'], 1.0)
+        self.assertEqual(values['power_cutoff_latched'], 1.0)
 
     def test_status_line_is_not_telemetry(self):
         self.assertEqual(parse_telemetry_line('OK,MOTOR_ARMED'), {})

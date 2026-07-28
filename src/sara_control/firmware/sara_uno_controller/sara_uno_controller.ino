@@ -12,6 +12,7 @@
  *   PCA9685 CH1 pitch, CH2 yaw, CH3 burun kapagi, CH4 ESC
  *   D6 -> siringa servosu SINYAL hatti
  *         (servo gucu harici 5-6 V kaynaktan, GND ortak)
+ *   D5 -> ana guc kesme karti (LOW=enerji var, HIGH=enerji kesildi)
  *   D2 -> yalniz olcum modu butonu (INPUT_PULLUP, basili=3 V)
  *   D7 -> LM2596 enable (aktif LOW varsayimi)
  *   D8/D9/D10 -> X9C103S INC/U-D/CS
@@ -73,6 +74,7 @@ const unsigned long YUZEY_SERVO_DUR_SURESI_MS = 200;
 const unsigned long HEARTBEAT_ZAMAN_ASIMI_MS = 1000;
 const unsigned long SERVO_KOMUT_ZAMAN_ASIMI_MS = 500;
 const unsigned long ATESLEME_MAKS_SURE_MS = 1000;
+const uint8_t ANA_GUC_KESME_PINI = 5;  // LOW=enerji var, HIGH=kes
 const uint8_t ATESLEME_FIZIKSEL_PINI = 2;
 const uint8_t LM2596_ENABLE_PINI = 7;  // aktif LOW
 const uint8_t X9C_INC_PINI = 8;
@@ -100,6 +102,7 @@ unsigned long armBaslangicMs = 0;
 unsigned long sonRampMs = 0;
 unsigned long sonHeartbeatMs = 0;
 bool heartbeatAlindi = false;
+bool anaGucKesildi = false;
 
 float pitchServoAcisi = 90.0f;
 float yawServoAcisi = 90.0f;
@@ -269,6 +272,21 @@ void tumunuGuvenliDurdur()
   burunKapaginiKapat();
 }
 
+void anaGucuKesVeKilitle()
+{
+  if (anaGucKesildi) return;
+
+  // Once tum enerji tuketen/tehlikeli cikislari guvenli duruma getir.
+  // Ardindan D5 HIGH yapilir. Bu fonksiyondan sonra firmware'in hicbir
+  // yolu D5'i tekrar LOW yapmaz; yeniden acma ancak Uno reset/guc dongusu
+  // ile mumkundur.
+  tumunuGuvenliDurdur();
+  anaGucKesildi = true;
+  Serial.println("OK,POWER_CUTOFF_LATCHED");
+  Serial.flush();
+  digitalWrite(ANA_GUC_KESME_PINI, HIGH);
+}
+
 bool komuttanFloatOku(const char *komut, const char *onek, float &sonuc)
 {
   size_t uzunluk = strlen(onek);
@@ -338,6 +356,15 @@ void itkiKomutunuUygula(float normalizeItki)
 void komutuIsle(char *komut)
 {
   for (char *p = komut; *p; ++p) *p = toupper(*p);
+
+  if (anaGucKesildi) {
+    if (strcmp(komut, "POWER_CUTOFF") == 0) {
+      Serial.println("OK,POWER_CUTOFF_LATCHED");
+    } else {
+      Serial.println("ERR,POWER_CUTOFF_LATCHED");
+    }
+    return;
+  }
 
   float deger;
   if (komuttanFloatOku(komut, "THRUST=", deger)) {
@@ -460,6 +487,10 @@ void komutuIsle(char *komut)
     Serial.println("OK,ALL_STOPPED");
     return;
   }
+  if (strcmp(komut, "POWER_CUTOFF") == 0) {
+    anaGucuKesVeKilitle();
+    return;
+  }
   if (strcmp(komut, "Z") == 0) {
     sifirKalibrasyonuYap();
     return;
@@ -522,6 +553,12 @@ void motoruGuncelle()
 
 void guvenligiGuncelle()
 {
+  if (anaGucKesildi) {
+    // Olcum modu dahil hicbir arka plan yolu D5'i veya eyleyicileri
+    // yeniden etkinlestiremez.
+    digitalWrite(ANA_GUC_KESME_PINI, HIGH);
+    return;
+  }
   if (kanatKomutuAlindi &&
       millis() - sonServoKomutMs > SERVO_KOMUT_ZAMAN_ASIMI_MS) {
     kanatlariMerkezle();
@@ -613,11 +650,17 @@ void basinciOkuVeYayinla()
   Serial.print(",ignition_button_pressed=");
   Serial.print(ateslemeButonuBasili ? 1 : 0);
   Serial.print(",ignition_active=");
-  Serial.println(ateslemeIstegi ? 1 : 0);
+  Serial.print(ateslemeIstegi ? 1 : 0);
+  Serial.print(",power_cutoff_latched=");
+  Serial.println(anaGucKesildi ? 1 : 0);
 }
 
 void setup()
 {
+  // Acilista enerji vardir. Bir kez HIGH yapildiktan sonra bu calisma
+  // oturumunda D5'i LOW yapan baska hicbir kod yolu yoktur.
+  pinMode(ANA_GUC_KESME_PINI, OUTPUT);
+  digitalWrite(ANA_GUC_KESME_PINI, LOW);
   pinMode(LM2596_ENABLE_PINI, OUTPUT);
   digitalWrite(LM2596_ENABLE_PINI, HIGH);
   pinMode(ATESLEME_FIZIKSEL_PINI, INPUT_PULLUP);

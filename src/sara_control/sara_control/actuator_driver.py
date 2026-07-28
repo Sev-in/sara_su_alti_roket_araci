@@ -163,6 +163,8 @@ class ActuatorDriverNode(Node):
         self._motion_permission = False
         self._emergency_stop = False
         self._power_cutoff = False
+        self._power_cutoff_commanded = False
+        self._power_cutoff_confirmed = False
         self._last_control_time = None
         self._surface_running = False
         self._surface_running_confirmed = False
@@ -236,6 +238,8 @@ class ActuatorDriverNode(Node):
         self._motor_armed = False
         self._arm_requested = False
         self._heartbeat_confirmed = False
+        self._power_cutoff_commanded = False
+        self._power_cutoff_confirmed = False
         self._surface_running_confirmed = False
         self._surface_pulse_confirmed = False
         self._ignition_commanded = False
@@ -301,7 +305,14 @@ class ActuatorDriverNode(Node):
         self._emergency_stop = bool(msg.data)
 
     def _on_power_cutoff(self, msg):
-        self._power_cutoff = bool(msg.data)
+        requested = bool(msg.data)
+        if requested and not self._power_cutoff:
+            self.get_logger().error(
+                'ANA GUC KESME istendi: Uno D5 HIGH kilitlenecek.')
+        # Gorev tamamlanmasi/GUVENLI_SONLANDIRMA sonrasinda gelen False,
+        # gucu yeniden acamaz. Kilit ancak surec ve Uno fiziksel olarak
+        # yeniden baslatildiginda temizlenir.
+        self._power_cutoff = self._power_cutoff or requested
 
     def _touch_control(self):
         self._last_control_time = self.get_clock().now()
@@ -315,10 +326,19 @@ class ActuatorDriverNode(Node):
         return age <= self.command_timeout
 
     def _heartbeat_tick(self):
-        self._write('HB')
+        if not self._power_cutoff:
+            self._write('HB')
 
     def _command_tick(self):
         if not self._serial_ready():
+            return
+
+        # Ana guc kesme heartbeat'ten bagimsiz ve en yuksek onceliklidir.
+        # Uno POWER_CUTOFF komutu da heartbeat kosulu aramaz.
+        if self._power_cutoff:
+            if not self._power_cutoff_commanded:
+                if self._write('POWER_CUTOFF'):
+                    self._power_cutoff_commanded = True
             return
 
         # Uno, MOTOR_ARM komutundan once en az bir gecerli heartbeat
@@ -331,7 +351,6 @@ class ActuatorDriverNode(Node):
 
         blocked = (
             self._emergency_stop
-            or self._power_cutoff
             or not self._controls_fresh()
         )
         if blocked:
@@ -466,6 +485,8 @@ class ActuatorDriverNode(Node):
             self._ignition_output_active = False
             self._ignition_measurement_mode = False
             self._ignition_button_pressed = False
+            self._power_cutoff_commanded = False
+            self._power_cutoff_confirmed = False
             self._motor_state = 'READY'
             self._last_error = '-'
             self._write('HB')
@@ -483,6 +504,15 @@ class ActuatorDriverNode(Node):
             return
         if line == 'OK,IGNITION_OFF':
             self._ignition_confirmed = False
+            return
+        if line == 'OK,POWER_CUTOFF_LATCHED':
+            self._power_cutoff_commanded = True
+            self._power_cutoff_confirmed = True
+            self._motor_armed = False
+            self._arm_requested = False
+            self._motor_state = 'POWER_CUTOFF'
+            self.get_logger().error(
+                'Uno ana guc kesme kilidini uyguladi (D5=HIGH).')
             return
         if line.startswith('ERR,'):
             self._last_error = line
@@ -563,6 +593,12 @@ class ActuatorDriverNode(Node):
             except (TypeError, ValueError, OverflowError):
                 self._ignition_output_active = False
                 self._ignition_confirmed = False
+        if 'power_cutoff_latched' in values:
+            try:
+                self._power_cutoff_confirmed = (
+                    int(values['power_cutoff_latched']) == 1)
+            except (TypeError, ValueError, OverflowError):
+                self._power_cutoff_confirmed = False
         if 'pressure_kpa' not in values:
             return
         try:
@@ -677,6 +713,15 @@ class ActuatorDriverNode(Node):
             KeyValue(
                 key='ignition_commanded',
                 value=str(self._ignition_commanded)),
+            KeyValue(
+                key='power_cutoff_requested',
+                value=str(self._power_cutoff)),
+            KeyValue(
+                key='power_cutoff_commanded',
+                value=str(self._power_cutoff_commanded)),
+            KeyValue(
+                key='power_cutoff_confirmed',
+                value=str(self._power_cutoff_confirmed)),
             KeyValue(key='error_count', value=str(self._error_count)),
             KeyValue(
                 key='connection_count',

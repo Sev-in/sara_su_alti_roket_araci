@@ -45,12 +45,10 @@ Cikti (NIHAI komutlar - Pixhawk/MAVROS koprusu SADECE bunlari dinlemeli):
     /sara/control/launch_command      (std_msgs/Bool)         -- burun ayirma sistemine (atesleme) - SISTEMDE BUNU True YAPABILEN TEK YER
     /sara/safety/approved             (std_msgs/Bool)         -- semadaki "Guvenli Onay?" karari (Evet=True/Hayir=False)
     /sara/safety/fail_safe_active     (std_msgs/Bool)         -- "Hayir" dalinin acik gostergesi (Fail-Safe/Komut Bloke)
-    /sara/safety/main_power_cutoff_command (std_msgs/Bool)    -- YENI (sartname 6.2.1): gorev/faz TAMAMLANDIGINDA
-                                                                   veya GUVENLI_SONLANDIRMA'ya girildiginde True olur.
-                                                                   Fiziksel MOSFET ana guc kesme hattina baglanmasi
-                                                                   AYRI bir donanim gorevidir (pin henuz netlesmedi,
-                                                                   KTR'de tanimli devre - actuator_driver.py'ye
-                                                                   eklenecek).
+    /sara/safety/main_power_cutoff_command (std_msgs/Bool)    -- Gorev/faz TAMAMLANDIGINDA
+                                                                   veya GUVENLI_SONLANDIRMA'ya girildiginde kilitli True olur.
+                                                                   actuator_driver bunu Uno POWER_CUTOFF
+                                                                   komutuna ve D5 HIGH cikisina cevirir.
     /sara/safety/status               (diagnostic_msgs/DiagnosticStatus)  -- blokaj nedeni dahil
 """
 
@@ -154,6 +152,9 @@ class SafetyNode(Node):
         self._nose_cap_command_latched = False
         self._was_launch_command = False
         self._task_complete = False   # YENI - guidance_node'dan gelir
+        # Bir terminal faz goruldugunde ana guc kesme istegi, node yeniden
+        # baslatilana kadar geri alinamaz. Uno tarafinda da ayni kilit vardir.
+        self._main_power_cutoff_latched = False
 
         self.create_subscription(Float64, '/sara/control/thrust_request', self._on_thrust_req, 10)
         self.create_subscription(Vector3, '/sara/control/fin_request', self._on_fin_req, 10)
@@ -197,9 +198,9 @@ class SafetyNode(Node):
         # topic'i dinleyebilir).
         self._approved_pub = self.create_publisher(Bool, '/sara/safety/approved', 10)          # Evet=True / Hayir=False
         self._failsafe_pub = self.create_publisher(Bool, '/sara/safety/fail_safe_active', 10)   # Hayir dalinin acik gostergesi
-        # YENI (sartname 6.2.1 uyumu): gorev/faz TAMAMLANDIGINDA veya
-        # GUVENLI_SONLANDIRMA'ya girildiginde True olur. Fiziksel MOSFET
-        # ana guc kesme hattina baglanmasi ayri bir donanim gorevidir.
+        # Gorev/faz TAMAMLANDIGINDA veya GUVENLI_SONLANDIRMA'ya
+        # girildiginde kilitli True olur. actuator_driver bu istegi Uno
+        # POWER_CUTOFF komutuna ve D5 HIGH cikisina cevirir.
         self._power_cutoff_pub = self.create_publisher(Bool, '/sara/safety/main_power_cutoff_command', 10)
         self._status_pub = self.create_publisher(DiagnosticStatus, '/sara/safety/status', 10)
 
@@ -229,6 +230,8 @@ class SafetyNode(Node):
 
     def _on_task_complete(self, msg: Bool):
         self._task_complete = msg.data
+        if msg.data:
+            self._main_power_cutoff_latched = True
 
     def _on_motion_permission(self, msg: Bool):
         self._last_motion_permission_time = self.get_clock().now()
@@ -412,7 +415,7 @@ class SafetyNode(Node):
         # zaten forward_motion=False gonderir, ancak burada da ACIKCA/
         # KOSULSUZ olarak tum hareket komutlarini sifirliyoruz - guidance
         # katmanindaki olasi bir hataya karsi ikinci, bagimsiz bir guvence.
-        if self._task_complete:
+        if self._main_power_cutoff_latched:
             thrust_command = 0.0
             fin_command = Vector3(x=0.0, y=0.0, z=0.0)
             buoyancy_command = 0.0
@@ -456,7 +459,7 @@ class SafetyNode(Node):
         self._failsafe_pub.publish(failsafe)
 
         power_cutoff = Bool()
-        power_cutoff.data = bool(self._task_complete)
+        power_cutoff.data = bool(self._main_power_cutoff_latched)
         self._power_cutoff_pub.publish(power_cutoff)
 
         status = DiagnosticStatus()
@@ -470,7 +473,9 @@ class SafetyNode(Node):
             KeyValue(key='approved', value=str(core_safe)),
             KeyValue(key='fail_safe_active', value=str(not core_safe)),
             KeyValue(key='task_complete', value=str(self._task_complete)),
-            KeyValue(key='main_power_cutoff_command', value=str(self._task_complete)),
+            KeyValue(
+                key='main_power_cutoff_command',
+                value=str(self._main_power_cutoff_latched)),
             KeyValue(key='thrust_command', value=f'{thrust_cmd:.2f}'),
             KeyValue(
                 key='controlled_motor_stop',

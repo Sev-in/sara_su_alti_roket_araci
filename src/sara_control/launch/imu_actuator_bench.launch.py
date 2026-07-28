@@ -4,8 +4,10 @@
 Bu launch mission_start ve guidance dugumlerini baslatmaz. Burun kapagi
 su sensoru desenini izler. Siringa, enable_surface_servo aciksa surekli
 500 ms 1200 us / 200 ms 1500 us desenini tekrarlar; atesleme her
-dongude False tutulur. Komutlar
-normal safety_node ve actuator_driver zincirinden gecmeye devam eder.
+dongude False tutulur. Ana guc kesme testi iki ayri onay acildiktan
+sonra /sara/bench/power_cutoff_request=True ile testin son adimi olarak
+tetiklenebilir. Komutlar normal safety_node ve actuator_driver zincirinden
+gecmeye devam eder.
 """
 
 import os
@@ -49,17 +51,39 @@ def generate_launch_description():
             'actuator_driver motoru ve ateslemeyi zorla kapali tutar'
         ),
     )
+    power_cutoff_arg = DeclareLaunchArgument(
+        'enable_power_cutoff_test',
+        default_value='false',
+        description=(
+            'Testin sonunda /sara/bench/power_cutoff_request ile Uno D5 '
+            'ana guc kesmesini denemeye izin ver'
+        ),
+    )
+    power_cutoff_confirm_arg = DeclareLaunchArgument(
+        'confirm_power_cutoff_test_safe',
+        default_value='false',
+        description=(
+            'Guc kesme kartinin yalniz guvenli olcum yukune bagli oldugunu '
+            've kesme sonrasinda testin bitecegini operator onayi'
+        ),
+    )
 
     enable_motor = LaunchConfiguration('enable_motor')
     confirmed = LaunchConfiguration('confirm_motor_test_safe')
     motor_speed = LaunchConfiguration('motor_test_speed_ms')
     enable_surface_servo = LaunchConfiguration('enable_surface_servo')
+    enable_power_cutoff = LaunchConfiguration(
+        'enable_power_cutoff_test')
+    confirm_power_cutoff = LaunchConfiguration(
+        'confirm_power_cutoff_test_safe')
 
     return LaunchDescription([
         enable_motor_arg,
         confirm_arg,
         speed_arg,
         surface_servo_arg,
+        power_cutoff_arg,
+        power_cutoff_confirm_arg,
         Node(
             package='sara_control',
             executable='actuator_driver',
@@ -122,6 +146,10 @@ def generate_launch_description():
                         confirmed, value_type=bool),
                     'motor_test_speed_ms': ParameterValue(
                         motor_speed, value_type=float),
+                    'enable_power_cutoff_test': ParameterValue(
+                        enable_power_cutoff, value_type=bool),
+                    'confirm_power_cutoff_test_safe': ParameterValue(
+                        confirm_power_cutoff, value_type=bool),
                 },
             ],
         ),

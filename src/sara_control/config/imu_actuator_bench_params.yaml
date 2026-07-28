@@ -5,6 +5,9 @@ imu_actuator_bench:
     enable_motor: false
     confirm_motor_test_safe: false
     motor_test_speed_ms: 0.15
+    # Geri donussuz D5 HIGH testi varsayilan olarak kapali ve iki onaylidir.
+    enable_power_cutoff_test: false
+    confirm_power_cutoff_test_safe: false
     # Ters PWM yonunde once 0.50, gerekirse 0.70 m/s denenmelidir.
     # 0.70 m/s, onceki 0.50 m/s / 2200 us testine yakin darbe sapmasi
     # uretirken 1000 us belgeli sinirin icinde kalir.
