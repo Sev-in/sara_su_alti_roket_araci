@@ -4,6 +4,7 @@
 safety_node:
   ros__parameters:
     nav_status_timeout_s: 2.0
+    motion_permission_timeout_s: 1.0
     control_rate_hz: 20.0
     # Sartname 4.1: ">30 derece" - guduмden BAGIMSIZ ikinci dogrulama,
     # Bagimsiz guvenlik esigi de sartnameden daha gevsek olamaz.

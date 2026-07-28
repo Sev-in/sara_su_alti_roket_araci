@@ -245,6 +245,7 @@ class GuidanceNode(Node):
         self.declare_parameter('g2_ates_sinyali_timeout_s', 30.0)     # atesleme fazina OZEL, BAGIMSIZ zaman asimi
         self.declare_parameter('g2_actuator_status_timeout_s', 1.5)
         self.declare_parameter('nav_status_timeout_s', 2.0)           # fail-safe: navigasyon veri zaman asimi
+        self.declare_parameter('motion_permission_timeout_s', 1.0)    # mission_start canlilik zaman asimi
         self.declare_parameter('startup_grace_period_s', 5.0)          # baslangicta diger node'lar henuz
                                                                             # yayina baslamadan "nav gecersiz"
                                                                             # fail-safe'i yanlislikla tetiklenmesin
@@ -316,6 +317,8 @@ class GuidanceNode(Node):
         self.g2_actuator_status_timeout = self.get_parameter(
             'g2_actuator_status_timeout_s').value
         self.nav_status_timeout = self.get_parameter('nav_status_timeout_s').value
+        self.motion_permission_timeout = self.get_parameter(
+            'motion_permission_timeout_s').value
         self.startup_grace_period = self.get_parameter('startup_grace_period_s').value
         self.periodic_log_interval = self.get_parameter('periodic_log_interval_s').value
 
@@ -390,6 +393,7 @@ class GuidanceNode(Node):
         self._emergency_stop = False
         self._leak_detected = False
         self._motion_permission = False   # mission_start_node'dan gelir (Tablo 11 - Gorev Baslatma/Akustik Uyari)
+        self._last_motion_permission_time = None
 
         self._target_depth = 0.0
         self._target_heading = 0.0
@@ -509,6 +513,7 @@ class GuidanceNode(Node):
 
     def _on_motion_permission(self, msg: Bool):
         self._motion_permission = msg.data
+        self._last_motion_permission_time = self.get_clock().now()
 
     # ======================================================================
     # Yardimci hesaplar
@@ -554,6 +559,14 @@ class GuidanceNode(Node):
         if age > self.nav_status_timeout:
             return False
         return self._nav_status_level != DiagnosticStatus.ERROR
+
+    def _motion_permission_fresh(self) -> bool:
+        if self._last_motion_permission_time is None:
+            return False
+        age = (
+            self.get_clock().now() - self._last_motion_permission_time
+        ).nanoseconds * 1e-9
+        return age <= self.motion_permission_timeout
 
     def _ignition_confirmation_fresh(self) -> bool:
         if self._last_actuator_status_time is None:
@@ -717,6 +730,11 @@ class GuidanceNode(Node):
             failsafe_reason = 'acil durdurma butonuna basildi'
         elif self._leak_detected:
             failsafe_reason = 'su kacagi (leak) tespit edildi'
+        elif (
+            self._mission_elapsed() > self.startup_grace_period
+            and not self._motion_permission_fresh()
+        ):
+            failsafe_reason = 'mission_start hareket izni verisi zaman asimi'
         elif self._mission_elapsed() > self.startup_grace_period and not self._nav_ok():
             # DUZELTME: startup_grace_period icinde nav verisi henuz gelmemis
             # olabilir (diger node'lar henuz yayina baslamamis) - bu durumu
@@ -1282,6 +1300,9 @@ class GuidanceNode(Node):
             KeyValue(key='emergency_stop', value=str(self._emergency_stop)),
             KeyValue(key='leak_detected', value=str(self._leak_detected)),
             KeyValue(key='motion_permission', value=str(self._motion_permission)),
+            KeyValue(
+                key='motion_permission_fresh',
+                value=str(self._motion_permission_fresh())),
         ]
         self._status_pub.publish(status)
 

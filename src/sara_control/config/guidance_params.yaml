@@ -25,6 +25,7 @@ guidance_node:
     g2_ates_sinyali_timeout_s: 30.0   # atesleme fazina ozel, bagimsiz zaman asimi
     g2_actuator_status_timeout_s: 1.5 # Uno/eyleyici atesleme onayi canlilik siniri
     nav_status_timeout_s: 2.0         # fail-safe: navigasyon veri zaman asimi
+    motion_permission_timeout_s: 1.0  # mission_start hareket izni canlilik siniri
     startup_grace_period_s: 5.0       # baslangicta nav fail-safe'i erken tetiklenmesin
     control_rate_hz: 10.0
     water_debounce_s: 0.3              # SEN0368 yalanci gecislerini engeller

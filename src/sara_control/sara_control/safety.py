@@ -90,6 +90,7 @@ class SafetyNode(Node):
         super().__init__('safety_node')
 
         self.declare_parameter('nav_status_timeout_s', 2.0)
+        self.declare_parameter('motion_permission_timeout_s', 1.0)
         self.declare_parameter('control_rate_hz', 20.0)
         # Teknik Sartname Madde 4.1: aci 30 dereceden buyuk olmalidir.
         self.declare_parameter('launch_min_pitch_deg', 31.0)
@@ -100,6 +101,8 @@ class SafetyNode(Node):
         self.declare_parameter('nose_cap_latching', True)
 
         self.nav_status_timeout = self.get_parameter('nav_status_timeout_s').value
+        self.motion_permission_timeout = self.get_parameter(
+            'motion_permission_timeout_s').value
         self.launch_min_pitch = math.radians(self.get_parameter('launch_min_pitch_deg').value)
         self.g2_safe_zone_min = self.get_parameter(
             'g2_safe_zone_min_m').value
@@ -120,6 +123,7 @@ class SafetyNode(Node):
         self._last_buoyancy_req_time = None
 
         self._motion_permission = False
+        self._last_motion_permission_time = None
         self._surface_detected = False
         self._nose_submerged = True
         self._tail_submerged = True
@@ -227,6 +231,7 @@ class SafetyNode(Node):
         self._task_complete = msg.data
 
     def _on_motion_permission(self, msg: Bool):
+        self._last_motion_permission_time = self.get_clock().now()
         if msg.data and not self._motion_permission:
             self._mission_origin_x = self._x
             self._mission_origin_y = self._y
@@ -301,6 +306,14 @@ class SafetyNode(Node):
         age = (self.get_clock().now() - stamp).nanoseconds * 1e-9
         return age < self.request_timeout
 
+    def _motion_permission_fresh(self) -> bool:
+        if self._last_motion_permission_time is None:
+            return False
+        age = (
+            self.get_clock().now() - self._last_motion_permission_time
+        ).nanoseconds * 1e-9
+        return age <= self.motion_permission_timeout
+
     def _g2_forward_distance(self) -> float:
         if not self._mission_reference_set:
             return 0.0
@@ -337,6 +350,10 @@ class SafetyNode(Node):
         if not self._pixhawk_connected:
             core_safe = False
             block_reasons.append('pixhawk_baglantisi_yok')
+        motion_permission_fresh = self._motion_permission_fresh()
+        if not motion_permission_fresh:
+            core_safe = False
+            block_reasons.append('hareket_izni_verisi_zaman_asimi')
 
         thrust_ok = core_safe and self._motion_permission and self._request_fresh(self._last_thrust_req_time)
         if core_safe and not self._motion_permission:
@@ -473,6 +490,9 @@ class SafetyNode(Node):
             KeyValue(key='tail_submerged', value=str(self._tail_submerged)),
             KeyValue(key='dogru_cikis_acisi', value=str(self._dogru_cikis_acisi)),
             KeyValue(key='motion_permission', value=str(self._motion_permission)),
+            KeyValue(
+                key='motion_permission_fresh',
+                value=str(self._motion_permission_fresh())),
             KeyValue(key='emergency_stop', value=str(self._emergency_stop)),
             KeyValue(key='leak_detected', value=str(self._leak_detected)),
         ]
