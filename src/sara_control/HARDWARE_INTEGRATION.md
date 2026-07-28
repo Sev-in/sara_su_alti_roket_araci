@@ -29,6 +29,10 @@ Bir fiziksel kaynagi yalniz bir node acar. Uno seri portunun tek sahibi
 PCA9685 CH5 kullanilmaz. Siringa/yuzeye cikis servosunun yalnizca
 sinyal kablosu Uno D6'ya baglanir. Servo Uno 5 V pininden beslenmez;
 harici servo beslemesinin GND hatti Uno GND ile ortaklanir.
+Yuzeye cikis komutu aktifken D6 sinyali 500 ms boyunca 1200 us, sonra
+200 ms boyunca 1500 us notr olacak sekilde kesintisiz tekrarlar.
+Heartbeat kaybi, `SURFACE_STOP` veya `ALL_STOP` servoyu 1500 us notr
+konumuna getirir.
 
 ## Atesleme cikisi olcum modu
 

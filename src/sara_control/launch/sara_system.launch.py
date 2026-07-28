@@ -144,8 +144,9 @@ def generate_launch_description():
     surface_servo_test_arg = DeclareLaunchArgument(
         'surface_servo_test_mode', default_value='false',
         description=(
-            'SADECE TEZGAH TESTI: Uno D6 siringa servosunu heartbeat boyunca '
-            '0-180 derece tarar; motor ve atesleme actuator_driver '
+            'SADECE TEZGAH TESTI: Uno D6 siringa servosunda heartbeat boyunca '
+            '500 ms 1200 us / 200 ms 1500 us desenini tekrarlar; motor ve '
+            'atesleme actuator_driver '
             'tarafinda zorla guvenli tutulur'
         )
     )

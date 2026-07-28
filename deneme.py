@@ -6,8 +6,9 @@ uyumludur:
 
 * Uno READY olana kadar bekler.
 * Heartbeat'i 5 Hz gonderir.
-* SURFACE_SWEEP_START ile D6 servosunu 0-180 derece arasinda tarar.
-* Ctrl+C, sure dolumu veya hata halinde taramayi ve tum cikislari durdurur.
+* SURFACE_START ile D6 servosunda gercek yuzeye cikis desenini calistirir:
+  500 ms 1200 us, ardindan 200 ms 1500 us.
+* Ctrl+C, sure dolumu veya hata halinde servoyu ve tum cikislari durdurur.
 
 actuator_driver veya Arduino Serial Monitor ayni anda calistirilmamalidir.
 """
@@ -90,7 +91,6 @@ def stop_surface_servo(connection):
     """D6 servosunu ve diger cikislari guvenli duruma getir."""
     try:
         send_command(connection, 'HB')
-        send_command(connection, 'SURFACE_SWEEP_STOP')
         send_command(connection, 'SURFACE_STOP')
         send_command(connection, 'ALL_STOP')
     except Exception as exc:
@@ -114,9 +114,10 @@ def run_test(port, baud, ready_timeout_s, duration_s):
         send_command(uno, 'IGNITION=0')
         send_command(uno, 'SURFACE_STOP')
         time.sleep(0.05)
-        send_command(uno, 'SURFACE_SWEEP_START')
+        send_command(uno, 'SURFACE_START')
         print(
-            'Arduino D6 servosuna 0-180 derece tarama komutu gonderildi. '
+            'Arduino D6 servosunda 500 ms 1200 us / 200 ms 1500 us '
+            'yuzeye cikis deseni baslatildi. '
             'Durdurmak icin Ctrl+C kullan.'
         )
 
@@ -138,7 +139,7 @@ def run_test(port, baud, ready_timeout_s, duration_s):
                 line = read_line(uno)
                 if line:
                     print(f'UNO: {line}')
-                    if line == 'OK,SURFACE_SWEEP_RUNNING':
+                    if line == 'OK,SURFACE_PULSE_RUNNING':
                         confirmed = True
                     if line.startswith('ERR,'):
                         if line in NON_FATAL_ERRORS:
@@ -151,7 +152,7 @@ def run_test(port, baud, ready_timeout_s, duration_s):
 
                 if not confirmed and now - start_time > 2.0:
                     print(
-                        'UYARI: Uno SURFACE_SWEEP_RUNNING onayi vermedi.',
+                        'UYARI: Uno SURFACE_PULSE_RUNNING onayi vermedi.',
                         file=sys.stderr,
                     )
                     confirmed = True

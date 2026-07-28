@@ -3,7 +3,8 @@
 
 Bu launch mission_start ve guidance dugumlerini baslatmaz. Burun kapagi
 su sensoru desenini izler. Siringa, enable_surface_servo aciksa surekli
-0-180 derece tarama yapar; atesleme her dongude False tutulur. Komutlar
+500 ms 1200 us / 200 ms 1500 us desenini tekrarlar; atesleme her
+dongude False tutulur. Komutlar
 normal safety_node ve actuator_driver zincirinden gecmeye devam eder.
 """
 
@@ -43,7 +44,8 @@ def generate_launch_description():
         'enable_surface_servo',
         default_value='false',
         description=(
-            'Uno D6 siringa servosunu bench boyunca 0-180 derece tarar; '
+            'Uno D6 siringa servosunda 500 ms 1200 us / 200 ms 1500 us '
+            'yuzeye cikis desenini tekrarlar; '
             'actuator_driver motoru ve ateslemeyi zorla kapali tutar'
         ),
     )
