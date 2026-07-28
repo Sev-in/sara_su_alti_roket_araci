@@ -282,7 +282,7 @@ void anaGucuKesVeKilitle()
   // ile mumkundur.
   tumunuGuvenliDurdur();
   anaGucKesildi = true;
-  Serial.println("OK,POWER_CUTOFF_LATCHED");
+  Serial.println(F("OK,POWER_CUTOFF_LATCHED"));
   Serial.flush();
   digitalWrite(ANA_GUC_KESME_PINI, HIGH);
 }
@@ -315,12 +315,12 @@ float ortalamaSensorGerilimiOku(uint16_t adet)
 void sifirKalibrasyonuYap()
 {
   tumunuGuvenliDurdur();
-  Serial.println("INFO,CALIBRATION_START");
+  Serial.println(F("INFO,CALIBRATION_START"));
   delay(3000);
   sifirSensorGerilimi =
       ortalamaSensorGerilimiOku(KALIBRASYON_ORNEK_SAYISI);
   filtreliSensorGerilimi = sifirSensorGerilimi;
-  Serial.println("INFO,CALIBRATION_DONE");
+  Serial.println(F("INFO,CALIBRATION_DONE"));
 }
 
 void itkiKomutunuUygula(float normalizeItki)
@@ -332,12 +332,12 @@ void itkiKomutunuUygula(float normalizeItki)
   }
   if (!heartbeatGuncel()) {
     motorNotr(MOTOR_FAULT);
-    Serial.println("ERR,HEARTBEAT_REQUIRED");
+    Serial.println(F("ERR,HEARTBEAT_REQUIRED"));
     return;
   }
   if (motorDurumu != MOTOR_ARMED && motorDurumu != MOTOR_RUNNING) {
     motorNotr(MOTOR_FAULT);
-    Serial.println("ERR,MOTOR_NOT_ARMED");
+    Serial.println(F("ERR,MOTOR_NOT_ARMED"));
     return;
   }
   // Yon isaretli tutulur; bu sayede -500 us hesabi Uno'da uint16_t
@@ -359,9 +359,9 @@ void komutuIsle(char *komut)
 
   if (anaGucKesildi) {
     if (strcmp(komut, "POWER_CUTOFF") == 0) {
-      Serial.println("OK,POWER_CUTOFF_LATCHED");
+      Serial.println(F("OK,POWER_CUTOFF_LATCHED"));
     } else {
-      Serial.println("ERR,POWER_CUTOFF_LATCHED");
+      Serial.println(F("ERR,POWER_CUTOFF_LATCHED"));
     }
     return;
   }
@@ -396,24 +396,24 @@ void komutuIsle(char *komut)
     if (ATESLEME_OLCUM_TEST_MODU) {
       // Olcum modunda cikisin tek sahibi fiziksel D2 butonudur.
       // ROS komutu kabul edilir fakat D7 cikisini degistirmez.
-      Serial.println("OK,IGNITION_MEASUREMENT_MODE_D2");
+      Serial.println(F("OK,IGNITION_MEASUREMENT_MODE_D2"));
       return;
     }
     if (deger >= 0.5f) {
       if (!heartbeatGuncel()) {
         ateslemeyiKapat();
-        Serial.println("ERR,HEARTBEAT_REQUIRED");
+        Serial.println(F("ERR,HEARTBEAT_REQUIRED"));
       } else if (digitalRead(ATESLEME_FIZIKSEL_PINI) == LOW) {
         ateslemeyiKapat();
-        Serial.println("ERR,IGNITION_PHYSICAL_INHIBIT");
+        Serial.println(F("ERR,IGNITION_PHYSICAL_INHIBIT"));
       } else {
         ateslemeIstegi = true;
         ateslemeBaslangicMs = millis();
-        Serial.println("OK,IGNITION_ACTIVE");
+        Serial.println(F("OK,IGNITION_ACTIVE"));
       }
     } else {
       ateslemeyiKapat();
-      Serial.println("OK,IGNITION_OFF");
+      Serial.println(F("OK,IGNITION_OFF"));
     }
     return;
   }
@@ -426,37 +426,37 @@ void komutuIsle(char *komut)
   if (strcmp(komut, "MOTOR_ARM") == 0) {
     if (!heartbeatGuncel()) {
       motorNotr(MOTOR_FAULT);
-      Serial.println("ERR,HEARTBEAT_REQUIRED");
+      Serial.println(F("ERR,HEARTBEAT_REQUIRED"));
     } else if (motorDurumu == MOTOR_DISARMED ||
                motorDurumu == MOTOR_FAULT) {
       motorNotr(MOTOR_ARMING);
       armBaslangicMs = millis();
-      Serial.println("OK,MOTOR_ARMING");
+      Serial.println(F("OK,MOTOR_ARMING"));
     }
     return;
   }
   if (strcmp(komut, "MOTOR_DISARM") == 0) {
     motorNotr(MOTOR_DISARMED);
-    Serial.println("OK,MOTOR_DISARMED");
+    Serial.println(F("OK,MOTOR_DISARMED"));
     return;
   }
   if (strcmp(komut, "MOTOR_STOP") == 0) {
     hedefEscUs = ESC_NOTR_US;
-    Serial.println("OK,MOTOR_STOPPING");
+    Serial.println(F("OK,MOTOR_STOPPING"));
     return;
   }
   if (strcmp(komut, "SERVO_CENTER") == 0) {
     kanatlariMerkezle();
-    Serial.println("OK,SERVO_CENTER");
+    Serial.println(F("OK,SERVO_CENTER"));
     return;
   }
   if (strcmp(komut, "SURFACE_START") == 0) {
     if (!heartbeatGuncel()) {
       yuzeyServosunuDurdur();
-      Serial.println("ERR,HEARTBEAT_REQUIRED");
+      Serial.println(F("ERR,HEARTBEAT_REQUIRED"));
     } else {
       yuzeyServosunuBaslat();
-      Serial.println("OK,SURFACE_PULSE_RUNNING");
+      Serial.println(F("OK,SURFACE_PULSE_RUNNING"));
     }
     return;
   }
@@ -465,26 +465,26 @@ void komutuIsle(char *komut)
   if (strcmp(komut, "SURFACE_SWEEP_START") == 0) {
     if (!heartbeatGuncel()) {
       yuzeyServosunuDurdur();
-      Serial.println("ERR,HEARTBEAT_REQUIRED");
+      Serial.println(F("ERR,HEARTBEAT_REQUIRED"));
     } else {
       yuzeyServosunuBaslat();
-      Serial.println("OK,SURFACE_PULSE_RUNNING");
+      Serial.println(F("OK,SURFACE_PULSE_RUNNING"));
     }
     return;
   }
   if (strcmp(komut, "SURFACE_SWEEP_STOP") == 0) {
     yuzeyServosunuDurdur();
-    Serial.println("OK,SURFACE_SWEEP_STOPPED");
+    Serial.println(F("OK,SURFACE_SWEEP_STOPPED"));
     return;
   }
   if (strcmp(komut, "SURFACE_STOP") == 0) {
     yuzeyServosunuDurdur();
-    Serial.println("OK,SURFACE_SERVO_STOPPED");
+    Serial.println(F("OK,SURFACE_SERVO_STOPPED"));
     return;
   }
   if (strcmp(komut, "ALL_STOP") == 0) {
     tumunuGuvenliDurdur();
-    Serial.println("OK,ALL_STOPPED");
+    Serial.println(F("OK,ALL_STOPPED"));
     return;
   }
   if (strcmp(komut, "POWER_CUTOFF") == 0) {
@@ -495,7 +495,7 @@ void komutuIsle(char *komut)
     sifirKalibrasyonuYap();
     return;
   }
-  Serial.println("ERR,UNKNOWN_COMMAND");
+  Serial.println(F("ERR,UNKNOWN_COMMAND"));
 }
 
 void seriKomutlariOku()
@@ -513,7 +513,7 @@ void seriKomutlariOku()
     } else {
       komutUzunlugu = 0;
       tumunuGuvenliDurdur();
-      Serial.println("ERR,COMMAND_TOO_LONG");
+      Serial.println(F("ERR,COMMAND_TOO_LONG"));
     }
   }
 }
@@ -525,14 +525,14 @@ void motoruGuncelle()
        motorDurumu == MOTOR_RUNNING) && !heartbeatGuncel()) {
     tumunuGuvenliDurdur();
     motorDurumu = MOTOR_FAULT;
-    Serial.println("ERR,HEARTBEAT_LOST");
+    Serial.println(F("ERR,HEARTBEAT_LOST"));
     return;
   }
 
   if (motorDurumu == MOTOR_ARMING &&
       simdi - armBaslangicMs >= ARM_BEKLEME_MS) {
     motorDurumu = MOTOR_ARMED;
-    Serial.println("OK,MOTOR_ARMED");
+    Serial.println(F("OK,MOTOR_ARMED"));
   }
 
   if (simdi - sonRampMs < ESC_RAMP_ARALIGI_MS) return;
@@ -562,11 +562,11 @@ void guvenligiGuncelle()
   if (kanatKomutuAlindi &&
       millis() - sonServoKomutMs > SERVO_KOMUT_ZAMAN_ASIMI_MS) {
     kanatlariMerkezle();
-    Serial.println("ERR,SERVO_COMMAND_TIMEOUT_CENTERED");
+    Serial.println(F("ERR,SERVO_COMMAND_TIMEOUT_CENTERED"));
   }
   if (yuzeyServoCalisiyor && !heartbeatGuncel()) {
     yuzeyServosunuDurdur();
-    Serial.println("ERR,HEARTBEAT_LOST_SURFACE_STOPPED");
+    Serial.println(F("ERR,HEARTBEAT_LOST_SURFACE_STOPPED"));
   }
 
   if (ATESLEME_OLCUM_TEST_MODU) {
@@ -580,7 +580,7 @@ void guvenligiGuncelle()
   if (ateslemeIstegi &&
       (!heartbeatGuncel() || fizikselInhibit || ateslemeZamanAsimi)) {
     ateslemeyiKapat();
-    Serial.println("ERR,IGNITION_SAFETY_CUTOFF");
+    Serial.println(F("ERR,IGNITION_SAFETY_CUTOFF"));
   }
   bool cikisAktif =
       ateslemeIstegi && heartbeatGuncel() && !fizikselInhibit;
@@ -621,37 +621,37 @@ void basinciOkuVeYayinla()
 
   if (millis() - sonTelemetriMs < TELEMETRI_ARALIGI_MS) return;
   sonTelemetriMs = millis();
-  Serial.print("voltage_v=");
+  Serial.print(F("voltage_v="));
   Serial.print(filtreliSensorGerilimi, 6);
-  Serial.print(",pressure_kpa=");
+  Serial.print(F(",pressure_kpa="));
   Serial.print(gaugeKpa, 3);
-  Serial.print(",depth_m=");
+  Serial.print(F(",depth_m="));
   Serial.print(derinlik, 3);
-  Serial.print(",esc_us=");
+  Serial.print(F(",esc_us="));
   Serial.print(mevcutEscUs);
-  Serial.print(",motor_state=");
+  Serial.print(F(",motor_state="));
   Serial.print((uint8_t)motorDurumu);
-  Serial.print(",heartbeat_ok=");
+  Serial.print(F(",heartbeat_ok="));
   Serial.print(heartbeatGuncel() ? 1 : 0);
-  Serial.print(",pitch_deg=");
+  Serial.print(F(",pitch_deg="));
   Serial.print(pitchServoAcisi, 1);
-  Serial.print(",yaw_deg=");
+  Serial.print(F(",yaw_deg="));
   Serial.print(yawServoAcisi, 1);
-  Serial.print(",nose_deg=");
+  Serial.print(F(",nose_deg="));
   Serial.print(burunServoAcisi, 1);
-  Serial.print(",surface_running=");
+  Serial.print(F(",surface_running="));
   Serial.print(yuzeyServoCalisiyor ? 1 : 0);
-  Serial.print(",surface_pulse=");
+  Serial.print(F(",surface_pulse="));
   Serial.print(yuzeyServoDarbeAktif ? 1 : 0);
-  Serial.print(",surface_motion_phase=");
+  Serial.print(F(",surface_motion_phase="));
   Serial.print(yuzeyServoHareketFazi ? 1 : 0);
-  Serial.print(",ignition_measurement_mode=");
+  Serial.print(F(",ignition_measurement_mode="));
   Serial.print(ATESLEME_OLCUM_TEST_MODU ? 1 : 0);
-  Serial.print(",ignition_button_pressed=");
+  Serial.print(F(",ignition_button_pressed="));
   Serial.print(ateslemeButonuBasili ? 1 : 0);
-  Serial.print(",ignition_active=");
+  Serial.print(F(",ignition_active="));
   Serial.print(ateslemeIstegi ? 1 : 0);
-  Serial.print(",power_cutoff_latched=");
+  Serial.print(F(",power_cutoff_latched="));
   Serial.println(anaGucKesildi ? 1 : 0);
 }
 
@@ -678,7 +678,7 @@ void setup()
   if (ATESLEME_OLCUM_TEST_MODU) {
     x9cKalibreEt();
     x9cHedefAdimaGit(X9C_3V_ADIMI);
-    Serial.println("INFO,IGNITION_MEASUREMENT_MODE_D2_READY");
+    Serial.println(F("INFO,IGNITION_MEASUREMENT_MODE_D2_READY"));
   }
   Wire.begin();
   pwm.begin();
@@ -688,7 +688,7 @@ void setup()
 
   tumunuGuvenliDurdur();
   sifirKalibrasyonuYap();
-  Serial.println("READY,SARA_UNO_CONTROLLER_V2");
+  Serial.println(F("READY,SARA_UNO_CONTROLLER_V2"));
 }
 
 void loop()
