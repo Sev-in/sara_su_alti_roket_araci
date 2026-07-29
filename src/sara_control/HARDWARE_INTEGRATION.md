@@ -1,5 +1,8 @@
 # SARA Donanim Entegrasyonu
 
+Havuz görev kabiliyeti videosu için ayrı ve normal görevlerden yalıtılmış
+çalıştırma akışı `VIDEO_DEMO.md` dosyasında açıklanmıştır.
+
 ## Baglanti sahipligi
 
 - Pixhawk 6C -> Jetson USB -> MAVROS -> `/mavros/imu/data`

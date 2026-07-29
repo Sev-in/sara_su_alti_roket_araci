@@ -240,6 +240,9 @@ class VehicleSimNode(Node):
             KeyValue(
                 key='ignition_active',
                 value=str(self._launch_cmd)),
+            KeyValue(
+                key='ignition_measurement_mode',
+                value='True'),
         ]
         self._actuator_status_pub.publish(actuator_status)
 

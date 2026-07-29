@@ -1,0 +1,42 @@
+# VIDEO_DEMO - havuz gorev kabiliyeti videosu parametreleri
+guidance_node:
+  ros__parameters:
+    # Belge kosulu: arac dinamik/statik gosterimde en az 1 m derinlikte.
+    minimum_depth_m: 1.0
+    target_depth_m: 1.10
+    depth_tolerance_m: 0.15
+
+    # Zamanli manevra dizisi video_demo_sequence.py icinde toplam 68 sn'dir.
+    minimum_maneuver_duration_s: 65.0
+
+    # Yaklasik 68 sn * 0.18 m/s = 12.2 m; 25 m havuzda dusuk hizli,
+    # sinirli rota/yunuslama gosterimi icin muhafazakar varsayilan.
+    maneuver_speed_ms: 0.18
+    dive_speed_ms: 0.22
+    surface_speed_ms: 0.15
+    # Tam yuzey algisi iki su sensorunun da kuru olmasini gerektirir;
+    # bu nedenle kapak kanitindan once arac seviye konuma getirilir.
+    surface_pitch_deg: 0.0
+
+    condition_hold_s: 2.0
+    # Her adimin suresi, arac hedefleri bu toleranslarla gercekten takip
+    # etmeye basladiktan sonra sayilir. Takip kaybolursa adim sayaci yenilenir.
+    tracking_hold_s: 1.0
+    heading_tracking_tolerance_deg: 15.0
+    pitch_tracking_tolerance_deg: 10.0
+    maneuver_step_timeout_s: 35.0
+    surface_cap_closed_hold_s: 5.0
+    nose_cap_open_hold_s: 3.0
+    dive_timeout_s: 35.0
+    surface_timeout_s: 35.0
+    ignition_timeout_s: 10.0
+    max_demo_duration_s: 180.0
+
+    nav_status_timeout_s: 2.0
+    motion_permission_timeout_s: 1.0
+    actuator_status_timeout_s: 1.5
+    startup_grace_period_s: 8.0
+    control_rate_hz: 10.0
+
+    # Launch tarafindan iki asamali onayla ezilir. Varsayilan kapali.
+    enable_ignition_demo: false

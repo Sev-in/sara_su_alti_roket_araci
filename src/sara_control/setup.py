@@ -47,6 +47,7 @@ setup(
             'sensor_get_data = sara_control.sensor_get_data:main',
             'telemetry = sara_control.telemetry:main',
             'vehicle_sim = sara_control.vehicle_sim:main',
+            'video_demo_guidance = sara_control.video_demo:main',
             'wave_estimator = sara_control.wave_estimator:main',
         ],
     },

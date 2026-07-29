@@ -9,6 +9,7 @@ KULLANIM:
   Test modu (vehicle_sim ile, donanim GEREKMEZ):
     ros2 launch sara_control sara_system.launch.py mode:=test mission_id:=1
     ros2 launch sara_control sara_system.launch.py mode:=test mission_id:=2
+    ros2 launch sara_control video_demo.launch.py mode:=test
 
   Gercek donanim modu (Pixhawk bagli olmali; MAVROS varsayilan olarak
   bu launch dosyasi tarafindan baslatilir):
@@ -21,6 +22,9 @@ KULLANIM:
 
 ARGUMANLAR:
     mission_id     : '1' (Seyir Gorevi) veya '2' (Atis Gorevi). Varsayilan: '1'
+    guidance_mode  : 'mission' normal Gorev 1/2 veya 'video_demo'.
+                     VIDEO_DEMO icin dogrudan video_demo.launch.py kullanin.
+    video_demo_ignition_enabled : Yalniz video demo olcum cikisi icin.
     mode           : 'test' (vehicle_sim) veya 'hardware' (gercek sensor/eyleyici
                      suruculeri). Varsayilan: 'test'
     enable_telemetry : CSV telemetri kaydini ac/kapat. Varsayilan: 'true'
@@ -79,6 +83,20 @@ def generate_launch_description():
         'mission_id', default_value='1',
         description="Kosulacak gorev: '1' (Seyir) veya '2' (Atis)"
     )
+    guidance_mode_arg = DeclareLaunchArgument(
+        'guidance_mode', default_value='mission',
+        description=(
+            "'mission' normal Gorev 1/2 gudumu; 'video_demo' havuz "
+            "gorev kabiliyeti gosterimi"
+        ),
+    )
+    video_demo_ignition_arg = DeclareLaunchArgument(
+        'video_demo_ignition_enabled', default_value='false',
+        description=(
+            'Yalniz guidance_mode=video_demo icin: olcum firmware\'i '
+            'dogrulaninca yuzeyde kapak + 3 V gosterimini etkinlestirir'
+        ),
+    )
     mode_arg = DeclareLaunchArgument(
         'mode', default_value='test',
         description="'test' (vehicle_sim) veya 'hardware' (gercek sensor/eyleyici suruculeri)"
@@ -132,6 +150,9 @@ def generate_launch_description():
     )
 
     mission_id = LaunchConfiguration('mission_id')
+    guidance_mode = LaunchConfiguration('guidance_mode')
+    video_demo_ignition_enabled = LaunchConfiguration(
+        'video_demo_ignition_enabled')
     mode = LaunchConfiguration('mode')
     enable_telemetry = LaunchConfiguration('enable_telemetry')
     log_directory = LaunchConfiguration('log_directory')
@@ -144,6 +165,12 @@ def generate_launch_description():
 
     is_test_mode = PythonExpression(["'", mode, "' == 'test'"])
     is_hardware_mode = PythonExpression(["'", mode, "' == 'hardware'"])
+    is_mission_guidance = PythonExpression([
+        "'", guidance_mode, "' == 'mission'",
+    ])
+    is_video_demo_guidance = PythonExpression([
+        "'", guidance_mode, "' == 'video_demo'",
+    ])
     start_hardware_mavros = PythonExpression([
         "'", mode, "' == 'hardware' and '",
         start_mavros, "'.lower() == 'true'",
@@ -236,6 +263,24 @@ def generate_launch_description():
             # ROS2 tip uyusmazligi hatasi verebilir.
             {'mission_id': ParameterValue(mission_id, value_type=int)},
         ],
+        condition=IfCondition(is_mission_guidance),
+    )
+
+    video_demo_guidance_node = Node(
+        package='sara_control',
+        executable='video_demo_guidance',
+        name='guidance_node',
+        output='screen',
+        parameters=[
+            os.path.join(config_dir, 'video_demo_params.yaml'),
+            {
+                'enable_ignition_demo': ParameterValue(
+                    video_demo_ignition_enabled,
+                    value_type=bool,
+                ),
+            },
+        ],
+        condition=IfCondition(is_video_demo_guidance),
     )
 
     autopilot_node = Node(
@@ -251,7 +296,19 @@ def generate_launch_description():
         executable='safety',
         name='safety_node',
         output='screen',
-        parameters=[os.path.join(config_dir, 'safety_params.yaml')],
+        parameters=[
+            os.path.join(config_dir, 'safety_params.yaml'),
+            {
+                'video_demo_mode': ParameterValue(
+                    is_video_demo_guidance,
+                    value_type=bool,
+                ),
+                'video_demo_ignition_enabled': ParameterValue(
+                    video_demo_ignition_enabled,
+                    value_type=bool,
+                ),
+            },
+        ],
     )
 
     # Pixhawk IMU + navigasyon derinligi ile dalga etkisini izler.
@@ -279,6 +336,8 @@ def generate_launch_description():
 
     return LaunchDescription([
         mission_id_arg,
+        guidance_mode_arg,
+        video_demo_ignition_arg,
         mode_arg,
         enable_telemetry_arg,
         log_directory_arg,
@@ -296,6 +355,7 @@ def generate_launch_description():
         navigation_node,
         mission_start_node,
         guidance_node,
+        video_demo_guidance_node,
         autopilot_node,
         safety_node,
         wave_estimator_node,

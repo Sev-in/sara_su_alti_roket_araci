@@ -68,6 +68,7 @@ CSV_COLUMNS = [
     'forward_motion_request', 'target_speed_ms', 'nose_cap_open_request', 'launch_request',
     'task_complete',                                                       # YENI
     'guidance_status_level',
+    'video_demo_maneuver_elapsed_s', 'video_demo_requirement_met',
     'motion_permission', 'acoustic_warning', 'mission_start_status_level',
     'thrust_request', 'fin_pitch_request', 'fin_yaw_request',
     'buoyancy_request', 'autopilot_status_level',
@@ -122,6 +123,8 @@ class TelemetryNode(Node):
         self._nose_cap_open_request = False
         self._launch_request = False
         self._guidance_status_level = DiagnosticStatus.STALE
+        self._video_demo_maneuver_elapsed_s = ''
+        self._video_demo_requirement_met = ''
 
         self._motion_permission = False
         self._acoustic_warning = False
@@ -167,8 +170,12 @@ class TelemetryNode(Node):
                                   lambda m: self._set('_launch_request', m.data), 10)
         self.create_subscription(Bool, '/sara/guidance/task_complete',
                                   lambda m: self._set('_task_complete', m.data), 10)  # YENI
-        self.create_subscription(DiagnosticStatus, '/sara/guidance/status',
-                                  lambda m: self._set('_guidance_status_level', m.level), 10)
+        self.create_subscription(
+            DiagnosticStatus,
+            '/sara/guidance/status',
+            self._on_guidance_status,
+            10,
+        )
 
         self.create_subscription(Bool, '/sara/mission_start/motion_permission',
                                   lambda m: self._set('_motion_permission', m.data), 10)
@@ -221,6 +228,16 @@ class TelemetryNode(Node):
 
     def _set(self, attr_name, value):
         setattr(self, attr_name, value)
+
+    def _on_guidance_status(self, msg):
+        self._guidance_status_level = msg.level
+        values = {kv.key: kv.value for kv in msg.values}
+        if 'maneuver_elapsed_s' in values:
+            self._video_demo_maneuver_elapsed_s = values[
+                'maneuver_elapsed_s']
+        if 'maneuver_requirement_met' in values:
+            self._video_demo_requirement_met = values[
+                'maneuver_requirement_met']
 
     def _on_odom(self, msg: Odometry):
         self._depth = msg.pose.pose.position.z
@@ -276,6 +293,10 @@ class TelemetryNode(Node):
             'launch_request': self._launch_request,
             'task_complete': self._task_complete,  # YENI
             'guidance_status_level': level_to_str(self._guidance_status_level),
+            'video_demo_maneuver_elapsed_s':
+                self._video_demo_maneuver_elapsed_s,
+            'video_demo_requirement_met':
+                self._video_demo_requirement_met,
             'motion_permission': self._motion_permission,
             'acoustic_warning': self._acoustic_warning,
             'mission_start_status_level': level_to_str(self._mission_start_status_level),

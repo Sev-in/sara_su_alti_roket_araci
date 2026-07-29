@@ -428,7 +428,9 @@ class AutopilotNode(Node):
                 'G1_YUZEYE_CIKIS',
                 'G2_GUVENLI_ATIS_BOLGESI',
                 'G2_TIRMANIS_35_DERECE',
+                'VIDEO_DEMO_YUZEYE_CIKIS_KAPAK_KAPALI',
                 'GUVENLI_SONLANDIRMA',
+                'VIDEO_DEMO_GUVENLI_SONLANDIRMA',
             )
             if buoyancy_allowed:
                 buoyancy = self.pid_buoyancy.update(

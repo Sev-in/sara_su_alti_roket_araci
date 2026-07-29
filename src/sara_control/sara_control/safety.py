@@ -70,6 +70,7 @@ from sara_control.mission_geometry import (
     is_at_or_beyond_distance,
 )
 from sara_control.sensor_processing import DebouncedBoolean
+from sara_control.video_demo_safety import video_demo_surface_gate
 
 
 class SafetyNode(Node):
@@ -89,6 +90,15 @@ class SafetyNode(Node):
         self.declare_parameter('nose_cap_latching', True)
         self.declare_parameter(
             'power_cutoff_on_emergency_stop', True)
+        # Havuz videosundaki 3 V gosterimi, normal Gorev 2'nin 30 m atis
+        # bolgesini gevsetmez. Ayri mod sadece olcum firmware'i, tam yuzey
+        # ve hareketsizlik birlikte dogrulanirsa kullanilabilir.
+        self.declare_parameter('video_demo_mode', False)
+        self.declare_parameter('video_demo_ignition_enabled', False)
+        self.declare_parameter(
+            'video_demo_max_abs_pitch_deg', 10.0)
+        self.declare_parameter('video_demo_max_speed_ms', 0.10)
+        self.declare_parameter('actuator_status_timeout_s', 1.5)
 
         self.nav_status_timeout = self.get_parameter('nav_status_timeout_s').value
         self.motion_permission_timeout = self.get_parameter(
@@ -104,6 +114,18 @@ class SafetyNode(Node):
         self.power_cutoff_on_emergency_stop = bool(
             self.get_parameter(
                 'power_cutoff_on_emergency_stop').value)
+        self.video_demo_mode = bool(
+            self.get_parameter('video_demo_mode').value)
+        self.video_demo_ignition_enabled = bool(
+            self.get_parameter(
+                'video_demo_ignition_enabled').value)
+        self.video_demo_max_abs_pitch = math.radians(float(
+            self.get_parameter(
+                'video_demo_max_abs_pitch_deg').value))
+        self.video_demo_max_speed = float(
+            self.get_parameter('video_demo_max_speed_ms').value)
+        self.actuator_status_timeout = float(
+            self.get_parameter('actuator_status_timeout_s').value)
         rate = float(self.get_parameter('control_rate_hz').value)
 
         self._thrust_request = 0.0
@@ -130,6 +152,7 @@ class SafetyNode(Node):
         self._x = 0.0
         self._y = 0.0
         self._heading = 0.0
+        self._forward_speed = 0.0
         self._mission_origin_x = 0.0
         self._mission_origin_y = 0.0
         self._mission_reference_heading = 0.0
@@ -139,6 +162,9 @@ class SafetyNode(Node):
         self._depth_valid = False
         self._last_nav_status_time = None
         self._nav_status_level = DiagnosticStatus.STALE
+        self._last_actuator_status_time = None
+        self._actuator_status_level = DiagnosticStatus.STALE
+        self._ignition_measurement_mode = False
 
         self._emergency_stop = False
         self._leak_detected = False
@@ -173,6 +199,12 @@ class SafetyNode(Node):
         self.create_subscription(Bool, '/sara/water_detect_1', self._on_water_nose, sensor_qos)
         self.create_subscription(Bool, '/sara/water_detect_2', self._on_water_tail, sensor_qos)
         self.create_subscription(DiagnosticStatus, '/sara/navigation/status', self._on_nav_status, 10)
+        self.create_subscription(
+            DiagnosticStatus,
+            '/sara/actuators/status',
+            self._on_actuator_status,
+            10,
+        )
         self.create_subscription(Bool, '/sara/safety/emergency_stop', self._on_emergency_stop, 10)
         self.create_subscription(Bool, '/sara/safety/leak_detected', self._on_leak, 10)
         self.create_subscription(
@@ -202,7 +234,9 @@ class SafetyNode(Node):
         self.create_timer(1.0 / rate, self._on_timer)
 
         self.get_logger().info(
-            'safety_node baslatildi. Sistemde launch_command=True uretebilecek TEK node budur.'
+            'safety_node baslatildi. Sistemde launch_command=True '
+            'uretebilecek TEK node budur. '
+            f'video_demo_mode={self.video_demo_mode}.'
         )
 
     def _on_thrust_req(self, msg: Float64):
@@ -241,6 +275,7 @@ class SafetyNode(Node):
         self._depth = msg.pose.pose.position.z
         self._x = msg.pose.pose.position.x
         self._y = msg.pose.pose.position.y
+        self._forward_speed = abs(float(msg.twist.twist.linear.x))
         q = msg.pose.pose.orientation
         _roll, self._pitch, self._heading = quaternion_to_euler(
             q.x, q.y, q.z, q.w)
@@ -273,6 +308,13 @@ class SafetyNode(Node):
         values = {kv.key: kv.value for kv in msg.values}
         self._pixhawk_connected = values.get('pixhawk_connected', 'False') == 'True'
         self._depth_valid = values.get('depth_valid', 'False') == 'True'
+
+    def _on_actuator_status(self, msg: DiagnosticStatus):
+        self._last_actuator_status_time = self.get_clock().now()
+        self._actuator_status_level = msg.level
+        values = {kv.key: kv.value for kv in msg.values}
+        self._ignition_measurement_mode = (
+            values.get('ignition_measurement_mode', 'False') == 'True')
 
     def _on_emergency_stop(self, msg: Bool):
         emergency_active = bool(msg.data)
@@ -321,6 +363,35 @@ class SafetyNode(Node):
             self.get_clock().now() - self._last_motion_permission_time
         ).nanoseconds * 1e-9
         return age <= self.motion_permission_timeout
+
+    def _actuator_status_fresh(self) -> bool:
+        if self._last_actuator_status_time is None:
+            return False
+        age = (
+            self.get_clock().now() - self._last_actuator_status_time
+        ).nanoseconds * 1e-9
+        return (
+            age <= self.actuator_status_timeout
+            and self._actuator_status_level != DiagnosticStatus.ERROR
+        )
+
+    def _video_demo_surface_safe(self) -> bool:
+        """Havuz 3 V/kapak gosterimi icin bagimsiz yuzey kilidi."""
+
+        return video_demo_surface_gate(
+            demo_mode=self.video_demo_mode,
+            ignition_enabled=self.video_demo_ignition_enabled,
+            depth_valid=self._depth_valid,
+            surface_detected=self._surface_detected,
+            depth_m=self._depth,
+            max_depth_m=self.launch_max_depth,
+            pitch_rad=self._pitch,
+            max_abs_pitch_rad=self.video_demo_max_abs_pitch,
+            forward_speed_ms=self._forward_speed,
+            max_speed_ms=self.video_demo_max_speed,
+            actuator_status_fresh=self._actuator_status_fresh(),
+            measurement_mode=self._ignition_measurement_mode,
+        )
 
     def _g2_forward_distance(self) -> float:
         if not self._mission_reference_set:
@@ -383,9 +454,25 @@ class SafetyNode(Node):
         else:
             buoyancy_command = 0.0
 
+        demo_surface_safe = self._video_demo_surface_safe()
         if self.nose_cap_latching:
-            if core_safe and self._nose_cap_open_request:
+            nose_cap_request_safe = (
+                core_safe
+                and self._nose_cap_open_request
+                and (
+                    not self.video_demo_mode
+                    or demo_surface_safe
+                )
+            )
+            if nose_cap_request_safe:
                 self._nose_cap_command_latched = True
+            elif (
+                self.video_demo_mode
+                and self._nose_cap_open_request
+                and not demo_surface_safe
+            ):
+                block_reasons.append(
+                    'video_demo_burun_kapagi_yuzey_kilidi')
         else:
             # Bench modunda CH3, su sensoru kosulu kaybolunca tekrar
             # 0 dereceye donebilmelidir. Gercek gorevde mandal aciktir.
@@ -397,17 +484,42 @@ class SafetyNode(Node):
         else:
             nose_cap_command = self._nose_cap_command_latched
 
-        launch_conditions = {
-            'core_safe': core_safe,
-            'hareket_izni': self._motion_permission,
-            'gudum_istegi': self._launch_request,
-            'guvenli_atis_bolgesi': self._in_g2_safe_zone(),
-            'derinlik_gecerli': self._depth_valid,
-            'yuzey_derinligi': self._depth <= self.launch_max_depth,
-            'burun_disarida_kuyruk_icerde': self._dogru_cikis_acisi,
-            'burun_kapagi_acik': self._nose_cap_command_latched,
-            'pitch_yeterli': self._pitch >= self.launch_min_pitch,
-        }
+        if self.video_demo_mode:
+            launch_conditions = {
+                'core_safe': core_safe,
+                'hareket_izni': self._motion_permission,
+                'gudum_istegi': self._launch_request,
+                'video_demo_3v_acik_onayli':
+                    self.video_demo_ignition_enabled,
+                'derinlik_gecerli': self._depth_valid,
+                'tam_yuzey_algilandi': self._surface_detected,
+                'yuzey_derinligi':
+                    self._depth <= self.launch_max_depth,
+                'yuzey_pitch_kararli':
+                    abs(self._pitch) <= self.video_demo_max_abs_pitch,
+                'arac_hareketsiz':
+                    self._forward_speed <= self.video_demo_max_speed,
+                'olcum_firmware_dogrulandi':
+                    self._actuator_status_fresh()
+                    and self._ignition_measurement_mode,
+                'burun_kapagi_acik':
+                    self._nose_cap_command_latched,
+            }
+        else:
+            launch_conditions = {
+                'core_safe': core_safe,
+                'hareket_izni': self._motion_permission,
+                'gudum_istegi': self._launch_request,
+                'guvenli_atis_bolgesi': self._in_g2_safe_zone(),
+                'derinlik_gecerli': self._depth_valid,
+                'yuzey_derinligi': self._depth <= self.launch_max_depth,
+                'burun_disarida_kuyruk_icerde':
+                    self._dogru_cikis_acisi,
+                'burun_kapagi_acik':
+                    self._nose_cap_command_latched,
+                'pitch_yeterli':
+                    self._pitch >= self.launch_min_pitch,
+            }
         launch_command = all(launch_conditions.values())
         if self._controlled_motor_stop:
             launch_command = False
@@ -488,6 +600,21 @@ class SafetyNode(Node):
             KeyValue(key='buoyancy_command', value=f'{buoyancy_cmd:.2f}'),
             KeyValue(key='nose_cap_command', value=str(nose_cap_cmd)),
             KeyValue(key='launch_command', value=str(launch_cmd)),
+            KeyValue(
+                key='video_demo_mode',
+                value=str(self.video_demo_mode)),
+            KeyValue(
+                key='video_demo_ignition_enabled',
+                value=str(self.video_demo_ignition_enabled)),
+            KeyValue(
+                key='ignition_measurement_mode',
+                value=str(self._ignition_measurement_mode)),
+            KeyValue(
+                key='video_demo_surface_safe',
+                value=str(self._video_demo_surface_safe())),
+            KeyValue(
+                key='forward_speed_ms',
+                value=f'{self._forward_speed:.3f}'),
             KeyValue(key='pitch_deg', value=f'{math.degrees(self._pitch):.1f}'),
             KeyValue(
                 key='g2_forward_distance_m',

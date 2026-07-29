@@ -20,3 +20,10 @@ safety_node:
     # Acil durdurma Uno D5 HIGH ile ana guc kesmeyi kilitler.
     # Yeniden acma fiziksel reset/guc dongusu gerektirir.
     power_cutoff_on_emergency_stop: true
+    # Normal Gorev 1/2 icin daima false. video_demo.launch.py tarafindan
+    # yalniz havuz gosteriminde ve iki asamali olcum onayiyla ezilir.
+    video_demo_mode: false
+    video_demo_ignition_enabled: false
+    video_demo_max_abs_pitch_deg: 10.0
+    video_demo_max_speed_ms: 0.10
+    actuator_status_timeout_s: 1.5
