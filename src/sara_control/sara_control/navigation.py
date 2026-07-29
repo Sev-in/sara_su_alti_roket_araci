@@ -48,6 +48,11 @@ from sensor_msgs.msg import Imu, FluidPressure
 from nav_msgs.msg import Odometry
 from diagnostic_msgs.msg import DiagnosticStatus, KeyValue
 
+from sara_control.math_utils import (
+    euler_to_quaternion,
+    quaternion_to_euler,
+    wrap_0_2pi,
+)
 from sara_control.sensor_processing import (
     DebouncedBoolean,
     HampelFilter,
@@ -57,44 +62,6 @@ from sara_control.sensor_processing import (
     pressure_to_depth,
     robust_median,
 )
-
-
-def wrap_0_2pi(angle: float) -> float:
-    """Heading'i [0, 2*pi) araligina sarar (0/360 gecis hatalarini onler)."""
-    return angle % (2.0 * math.pi)
-
-
-def euler_to_quaternion(roll: float, pitch: float, yaw: float):
-    """(roll, pitch, yaw) [rad] -> quaternion (x, y, z, w), aerospace ZYX sirasi."""
-    cy = math.cos(yaw * 0.5)
-    sy = math.sin(yaw * 0.5)
-    cp = math.cos(pitch * 0.5)
-    sp = math.sin(pitch * 0.5)
-    cr = math.cos(roll * 0.5)
-    sr = math.sin(roll * 0.5)
-
-    x = sr * cp * cy - cr * sp * sy
-    y = cr * sp * cy + sr * cp * sy
-    z = cr * cp * sy - sr * sp * cy
-    w = cr * cp * cy + sr * sp * sy
-    return x, y, z, w
-
-
-def quaternion_to_euler(x: float, y: float, z: float, w: float):
-    """Quaternion -> (roll, pitch, yaw) [rad], aerospace (ZYX) sirasi."""
-    sinr_cosp = 2.0 * (w * x + y * z)
-    cosr_cosp = 1.0 - 2.0 * (x * x + y * y)
-    roll = math.atan2(sinr_cosp, cosr_cosp)
-
-    sinp = 2.0 * (w * y - z * x)
-    sinp = max(-1.0, min(1.0, sinp))
-    pitch = math.asin(sinp)
-
-    siny_cosp = 2.0 * (w * z + x * y)
-    cosy_cosp = 1.0 - 2.0 * (y * y + z * z)
-    yaw = math.atan2(siny_cosp, cosy_cosp)
-
-    return roll, pitch, yaw
 
 
 class MovingAverage:

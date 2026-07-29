@@ -62,24 +62,7 @@ from nav_msgs.msg import Odometry
 from geometry_msgs.msg import PoseStamped, Vector3
 from diagnostic_msgs.msg import DiagnosticStatus, KeyValue
 
-
-def wrap_pi(angle: float) -> float:
-    return (angle + math.pi) % (2.0 * math.pi) - math.pi
-
-
-def quaternion_to_yaw_pitch_roll(x, y, z, w):
-    sinr_cosp = 2.0 * (w * x + y * z)
-    cosr_cosp = 1.0 - 2.0 * (x * x + y * y)
-    roll = math.atan2(sinr_cosp, cosr_cosp)
-
-    sinp = 2.0 * (w * y - z * x)
-    sinp = max(-1.0, min(1.0, sinp))
-    pitch = math.asin(sinp)
-
-    siny_cosp = 2.0 * (w * z + x * y)
-    cosy_cosp = 1.0 - 2.0 * (y * y + z * z)
-    yaw = math.atan2(siny_cosp, cosy_cosp)
-    return yaw, pitch, roll
+from sara_control.math_utils import quaternion_to_yaw_pitch_roll, wrap_pi
 
 
 class PIDController:

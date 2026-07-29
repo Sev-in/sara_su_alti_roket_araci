@@ -24,34 +24,12 @@ from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
 from std_msgs.msg import Bool, Float64
 
+from sara_control.math_utils import angle_diff_deg, clamp, quaternion_to_euler
 from sara_control.sensor_processing import DebouncedBoolean
 
 
-def clamp(value, lower, upper):
-    return max(lower, min(upper, value))
-
-
-def angle_diff_deg(current, reference):
-    difference = current - reference
-    while difference > 180.0:
-        difference -= 360.0
-    while difference < -180.0:
-        difference += 360.0
-    return difference
-
-
 def quaternion_to_euler_deg(q):
-    roll = math.atan2(
-        2.0 * (q.w * q.x + q.y * q.z),
-        1.0 - 2.0 * (q.x * q.x + q.y * q.y),
-    )
-    sin_pitch = clamp(
-        2.0 * (q.w * q.y - q.z * q.x), -1.0, 1.0)
-    pitch = math.asin(sin_pitch)
-    yaw = math.atan2(
-        2.0 * (q.w * q.z + q.x * q.y),
-        1.0 - 2.0 * (q.y * q.y + q.z * q.z),
-    )
+    roll, pitch, yaw = quaternion_to_euler(q.x, q.y, q.z, q.w)
     return tuple(math.degrees(value) for value in (roll, pitch, yaw))
 
 

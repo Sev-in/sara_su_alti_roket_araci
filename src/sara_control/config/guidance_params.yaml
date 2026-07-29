@@ -30,6 +30,15 @@ guidance_node:
     control_rate_hz: 10.0
     water_debounce_s: 0.3              # SEN0368 yalanci gecislerini engeller
 
+    # --- Dalga uyarlamasi ---
+    # wave_estimator her zaman izleme/telemetri uretir. Ilk deniz
+    # testlerinde false kalmalidir. Sakin ve dalgali rosbag kayitlariyla
+    # esikler dogrulandiktan sonra true yapilirsa hedef hiz, guvenilir ve
+    # taze recommended_speed_scale ile yalnizca AZALTILIR.
+    wave_adaptation_enabled: false
+    wave_status_timeout_s: 1.5
+    wave_min_confidence: 0.65
+
     # --- Faz hizlari (KTR Tablo 1 / Tablo 2 ile dogrulanan gercek degerler) ---
     max_calibrated_speed_ms: 1.076    # tam itkide (thrust=1.0) ulasilan hiz
     g1_calib_speed_ms: 0.895          # ilk 10 m dinamik dalis/stabilizasyon,

@@ -120,11 +120,16 @@ import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
 
-from std_msgs.msg import Bool, String, Float64
+from std_msgs.msg import Bool, String, Float64, UInt8
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import PoseStamped
 from diagnostic_msgs.msg import DiagnosticStatus, KeyValue
 
+from sara_control.math_utils import (
+    euler_to_quaternion,
+    quaternion_to_yaw_pitch_roll,
+    wrap_pi,
+)
 from sara_control.mission_geometry import (
     forward_distance_from_origin,
     is_at_or_beyond_distance,
@@ -190,36 +195,6 @@ PHASE_NAMES = {
 TERMINAL_PHASES = {PHASE_G1_TAMAMLANDI, PHASE_G2_TAMAMLANDI, PHASE_GUVENLI_SONLANDIRMA}
 
 
-def wrap_pi(angle: float) -> float:
-    return (angle + math.pi) % (2.0 * math.pi) - math.pi
-
-
-def quaternion_to_yaw_pitch_roll(x, y, z, w):
-    sinr_cosp = 2.0 * (w * x + y * z)
-    cosr_cosp = 1.0 - 2.0 * (x * x + y * y)
-    roll = math.atan2(sinr_cosp, cosr_cosp)
-
-    sinp = 2.0 * (w * y - z * x)
-    sinp = max(-1.0, min(1.0, sinp))
-    pitch = math.asin(sinp)
-
-    siny_cosp = 2.0 * (w * z + x * y)
-    cosy_cosp = 1.0 - 2.0 * (y * y + z * z)
-    yaw = math.atan2(siny_cosp, cosy_cosp)
-    return yaw, pitch, roll
-
-
-def euler_to_quaternion(roll, pitch, yaw):
-    cy, sy = math.cos(yaw * 0.5), math.sin(yaw * 0.5)
-    cp, sp = math.cos(pitch * 0.5), math.sin(pitch * 0.5)
-    cr, sr = math.cos(roll * 0.5), math.sin(roll * 0.5)
-    x = sr * cp * cy - cr * sp * sy
-    y = cr * sp * cy + sr * cp * sy
-    z = cr * cp * sy - sr * sp * cy
-    w = cr * cp * cy + sr * sp * sy
-    return x, y, z, w
-
-
 class GuidanceNode(Node):
 
     def __init__(self):
@@ -257,6 +232,12 @@ class GuidanceNode(Node):
         # satirlar takibi zorlastirabiliyor - <=0 verilirse (orn. 0.0)
         # TAMAMEN KAPANIR, sadece faz GECISLERI (cok daha seyrek) yazdirilir.
         self.declare_parameter('periodic_log_interval_s', 5.0)
+        # Dalga kestirim katmani ilk deniz testinde yalnizca izlenir.
+        # Esikler rosbag verisiyle dogrulandiktan sonra true yapildiginda
+        # wave_estimator'un tavsiye ettigi hiz carpani uygulanabilir.
+        self.declare_parameter('wave_adaptation_enabled', False)
+        self.declare_parameter('wave_status_timeout_s', 1.5)
+        self.declare_parameter('wave_min_confidence', 0.65)
 
         # --- Faz hizlari (KTR Tablo 1 / Tablo 2 ile dogrulanan gercek degerler) ---
         self.declare_parameter('max_calibrated_speed_ms', 1.076)   # tam itkide (thrust=1.0) ulasilan hiz
@@ -321,6 +302,12 @@ class GuidanceNode(Node):
             'motion_permission_timeout_s').value
         self.startup_grace_period = self.get_parameter('startup_grace_period_s').value
         self.periodic_log_interval = self.get_parameter('periodic_log_interval_s').value
+        self.wave_adaptation_enabled = bool(
+            self.get_parameter('wave_adaptation_enabled').value)
+        self.wave_status_timeout = float(
+            self.get_parameter('wave_status_timeout_s').value)
+        self.wave_min_confidence = float(
+            self.get_parameter('wave_min_confidence').value)
 
         self.max_calibrated_speed = self.get_parameter('max_calibrated_speed_ms').value
         self.g1_calib_speed = self.get_parameter('g1_calib_speed_ms').value
@@ -394,6 +381,10 @@ class GuidanceNode(Node):
         self._leak_detected = False
         self._motion_permission = False   # mission_start_node'dan gelir (Tablo 11 - Gorev Baslatma/Akustik Uyari)
         self._last_motion_permission_time = None
+        self._wave_level = 0
+        self._wave_confidence = 0.0
+        self._wave_speed_scale = 1.0
+        self._last_wave_time = None
 
         self._target_depth = 0.0
         self._target_heading = 0.0
@@ -428,6 +419,24 @@ class GuidanceNode(Node):
         self.create_subscription(Bool, '/sara/safety/leak_detected', self._on_leak, 10)
         # Gorev Baslatma / Akustik Uyari Katmani (ayri node - mission_start.py, Tablo 11)
         self.create_subscription(Bool, '/sara/mission_start/motion_permission', self._on_motion_permission, 10)
+        self.create_subscription(
+            UInt8,
+            '/sara/environment/wave_level',
+            self._on_wave_level,
+            10,
+        )
+        self.create_subscription(
+            Float64,
+            '/sara/environment/wave_confidence',
+            self._on_wave_confidence,
+            10,
+        )
+        self.create_subscription(
+            Float64,
+            '/sara/environment/recommended_speed_scale',
+            self._on_wave_speed_scale,
+            10,
+        )
 
         # ================= Yayinlar =================
         # NOT: acoustic_warning burada YAYINLANMAZ - bu sinyal artik mission_start_node'a
@@ -471,6 +480,18 @@ class GuidanceNode(Node):
 
     def _on_surface(self, msg: Bool):
         self._surface_detected = msg.data
+
+    def _on_wave_level(self, msg: UInt8):
+        self._wave_level = int(msg.data)
+        self._last_wave_time = self.get_clock().now()
+
+    def _on_wave_confidence(self, msg: Float64):
+        if math.isfinite(msg.data):
+            self._wave_confidence = max(0.0, min(1.0, msg.data))
+
+    def _on_wave_speed_scale(self, msg: Float64):
+        if math.isfinite(msg.data):
+            self._wave_speed_scale = max(0.0, min(1.0, msg.data))
 
     def _on_water_nose(self, msg: Bool):
         now_s = self.get_clock().now().nanoseconds * 1e-9
@@ -1210,6 +1231,26 @@ class GuidanceNode(Node):
     # ======================================================================
     # Yayin
     # ======================================================================
+    def _wave_adaptation_fresh(self):
+        """Dalga hiz uyarlamasinin kullanilabilir oldugunu dogrula."""
+        if (
+            not self.wave_adaptation_enabled
+            or self._last_wave_time is None
+            or self._wave_confidence < self.wave_min_confidence
+        ):
+            return False
+        age_s = (
+            self.get_clock().now() - self._last_wave_time
+        ).nanoseconds * 1e-9
+        return age_s <= self.wave_status_timeout
+
+    def _effective_target_speed(self):
+        """Dogrulandiysa dalga tavsiyesiyle hedef hizi azalt."""
+        speed = float(self._target_speed)
+        if self._wave_adaptation_fresh():
+            speed *= self._wave_speed_scale
+        return max(0.0, speed)
+
     def _publish_all(self):
         now = self.get_clock().now()
 
@@ -1232,8 +1273,11 @@ class GuidanceNode(Node):
         fwd.data = bool(self._forward_motion)
         self._forward_pub.publish(fwd)
 
+        effective_speed = self._effective_target_speed()
         speed_msg = Float64()
-        speed_msg.data = float(self._target_speed) if self._forward_motion else 0.0
+        speed_msg.data = (
+            effective_speed if self._forward_motion else 0.0
+        )
         self._speed_pub.publish(speed_msg)
 
         cap = Bool()
@@ -1280,6 +1324,30 @@ class GuidanceNode(Node):
             KeyValue(key='heading_error_rad', value=f'{self._heading_error_to(self._target_heading):.3f}'),
             KeyValue(key='pitch_deg', value=f'{math.degrees(self._pitch):.1f}'),
             KeyValue(key='target_speed_ms', value=f'{self._target_speed:.3f}'),
+            KeyValue(
+                key='effective_target_speed_ms',
+                value=(
+                    f'{effective_speed:.3f}'
+                    if self._forward_motion else '0.000'
+                ),
+            ),
+            KeyValue(
+                key='wave_adaptation_enabled',
+                value=str(self.wave_adaptation_enabled),
+            ),
+            KeyValue(
+                key='wave_adaptation_active',
+                value=str(self._wave_adaptation_fresh()),
+            ),
+            KeyValue(key='wave_level', value=str(self._wave_level)),
+            KeyValue(
+                key='wave_confidence',
+                value=f'{self._wave_confidence:.3f}',
+            ),
+            KeyValue(
+                key='wave_speed_scale',
+                value=f'{self._wave_speed_scale:.3f}',
+            ),
             KeyValue(key='g2_safe_zone', value=str(self._in_g2_safe_zone())),
             KeyValue(key='launch_request', value=str(self._launch_request)),
             KeyValue(

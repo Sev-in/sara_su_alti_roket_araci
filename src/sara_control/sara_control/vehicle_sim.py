@@ -2,11 +2,10 @@
 """
 vehicle_sim.py
 ===============
-SARA platformu - KAPALI CEVRIM Arac Simulatoru (mock_sensors.py'nin yerini alir)
+SARA platformu - KAPALI CEVRIM Arac Simulatoru.
 
-mock_sensors.py ONCEDEN YAZILMIS bir senaryoyu zamana gore oynatiyordu ve
-hicbir komutu DINLEMIYORDU (acik cevrim). Bu node ise safety_node'un
-urettigi NIHAI komutlari (*_command) okuyup BASIT BIR FIZIK MODELIYLE
+Bu node safety_node'un urettigi NIHAI komutlari (*_command) okuyup
+BASIT BIR FIZIK MODELIYLE
 aracin derinlik/heading/pitch durumunu gercekten gunceller, sonra bu
 simule edilmis duruma gore sahte sensor verisi (basinc, IMU, su var/yok)
 uretir. Boylece TUM zincir (navigation -> guidance -> autopilot -> safety
@@ -42,9 +41,8 @@ Cikti (navigation_node'un bekledigi TAM AYNI sensor topic'leri):
     /sara/water_detect_1           (std_msgs/Bool)
     /sara/water_detect_2           (std_msgs/Bool)
 
-NOT: mock_sensors.py ile AYNI ANDA calistirilmamalidir (ikisi de ayni
-topic'lere yayin yapar, cakisir). Kapali cevrim test icin mock_sensors
-yerine BUNU calistirin.
+Gercek donanim dugumleriyle ayni anda calistirilmamalidir; ayni sensor
+topic'lerine birden fazla kaynak yayin yaparsa veriler cakisir.
 """
 
 import math
@@ -58,16 +56,7 @@ from sensor_msgs.msg import Imu, FluidPressure
 from geometry_msgs.msg import Vector3
 from diagnostic_msgs.msg import DiagnosticStatus, KeyValue
 
-
-def euler_to_quaternion(roll, pitch, yaw):
-    cy, sy = math.cos(yaw * 0.5), math.sin(yaw * 0.5)
-    cp, sp = math.cos(pitch * 0.5), math.sin(pitch * 0.5)
-    cr, sr = math.cos(roll * 0.5), math.sin(roll * 0.5)
-    x = sr * cp * cy - cr * sp * sy
-    y = cr * sp * cy + sr * cp * sy
-    z = cr * cp * sy - sr * sp * cy
-    w = cr * cp * cy + sr * sp * sy
-    return x, y, z, w
+from sara_control.math_utils import euler_to_quaternion
 
 
 class VehicleSimNode(Node):
@@ -88,7 +77,7 @@ class VehicleSimNode(Node):
         self.declare_parameter('max_depth', 10.0)                    # havuz/deniz azami derinligi (guvenlik siniri, simulasyonda)
         self.declare_parameter('vehicle_length_m', 0.996)              # arac boyu [m] - burun/kuyruk sensor ayrimi icin (KTR)
 
-        # ================= Sensor simulasyon parametreleri (mock_sensors.py ile ayni) =================
+        # ================= Sensor simulasyon parametreleri =================
         self.declare_parameter('rho', 1000.0)
         self.declare_parameter('g', 9.80665)
         self.declare_parameter('surface_pressure_pa', 101325.0)
@@ -150,8 +139,7 @@ class VehicleSimNode(Node):
 
         self.get_logger().info(
             'vehicle_sim baslatildi (KAPALI CEVRIM). safety_node komutlarini dinliyor, '
-            'basit fizik modeliyle aracin durumunu gerceklestirip sahte sensor uretiyor. '
-            'mock_sensors.py ile AYNI ANDA CALISTIRMAYIN.'
+            'basit fizik modeliyle aracin durumunu gerceklestirip sahte sensor uretiyor.'
         )
 
     # ======================================================================

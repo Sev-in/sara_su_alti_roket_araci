@@ -1,0 +1,45 @@
+# Pixhawk IMU + navigasyon derinligi ile dalga etkisi kestirimi.
+# Ilk deniz testinde yalnizca izleme/telemetri uretir; kontrol zincirine
+# dogrudan komut vermez. Esikler rosbag kaydiyla dogrulanmalidir.
+
+wave_estimator_node:
+  ros__parameters:
+    imu_topic: '/sara/imu/data'
+    odom_topic: '/sara/navigation/odom'
+    thrust_topic: '/sara/control/thrust_command'
+
+    sample_rate_hz: 10.0
+    window_s: 8.0
+    minimum_fill_ratio: 0.75
+    gravity_ms2: 9.80665
+
+    imu_timeout_s: 1.0
+    odom_timeout_s: 1.0
+    thrust_timeout_s: 1.0
+
+    # Itki komutu degisince arac manevrasini dalga sanmamak icin
+    # kisa sure dalga seviyesi en fazla HAFIF olarak raporlanir.
+    thrust_change_threshold: 0.12
+    maneuver_ignore_s: 1.5
+
+    # Baslangic esikleri. Sakin/dalgali deniz rosbag kayitlarindan sonra
+    # araca ozel ayarlanmalidir.
+    roll_rms_light_deg: 2.0
+    pitch_rms_light_deg: 2.0
+    vertical_accel_rms_light_ms2: 0.20
+    depth_peak_to_peak_light_m: 0.06
+    moderate_score: 2.0
+    severe_score: 4.0
+
+    # Seviye titremesini onleyen histerezis sureleri.
+    enter_hold_s: 2.0
+    exit_hold_s: 4.0
+
+    # 1-10 saniye periyotlu salinimlar dalga adayi olarak izlenir.
+    min_period_s: 1.0
+    max_period_s: 10.0
+
+    # Sadece tavsiye topic'idir; guidance bu degeri dinlemez.
+    light_speed_scale: 1.0
+    moderate_speed_scale: 0.8
+    severe_speed_scale: 0.0

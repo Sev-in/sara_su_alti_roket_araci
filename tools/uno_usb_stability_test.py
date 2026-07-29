@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Uno/FTDI USB hattini eyleyici komutu vermeden kararlilik testine alir."""
+"""Uno/FTDI USB hattini komut vermeden uzun sure kararlilik testine alir."""
 
 import argparse
 import sys

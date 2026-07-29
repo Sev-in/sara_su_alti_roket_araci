@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Arduino Uno D6'ya bagli siringa servosunu test eder.
+"""Arduino Uno D6'ya bagli siringa servosunu ROS 2 olmadan test eder.
 
 Bu program ROS2 kullanmaz. sara_uno_controller.ino seri protokoluyle
 uyumludur:

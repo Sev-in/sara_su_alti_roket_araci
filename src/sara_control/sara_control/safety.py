@@ -63,23 +63,12 @@ from nav_msgs.msg import Odometry
 from geometry_msgs.msg import Vector3
 from diagnostic_msgs.msg import DiagnosticStatus, KeyValue
 
+from sara_control.math_utils import quaternion_to_euler
 from sara_control.mission_geometry import (
     forward_distance_from_origin,
     is_at_or_beyond_distance,
 )
 from sara_control.sensor_processing import DebouncedBoolean
-
-
-def quaternion_to_pitch(x, y, z, w):
-    sinp = 2.0 * (w * y - z * x)
-    sinp = max(-1.0, min(1.0, sinp))
-    return math.asin(sinp)
-
-
-def quaternion_to_yaw(x, y, z, w):
-    siny_cosp = 2.0 * (w * z + x * y)
-    cosy_cosp = 1.0 - 2.0 * (y * y + z * z)
-    return math.atan2(siny_cosp, cosy_cosp)
 
 
 class SafetyNode(Node):
@@ -247,8 +236,8 @@ class SafetyNode(Node):
         self._x = msg.pose.pose.position.x
         self._y = msg.pose.pose.position.y
         q = msg.pose.pose.orientation
-        self._pitch = quaternion_to_pitch(q.x, q.y, q.z, q.w)
-        self._heading = quaternion_to_yaw(q.x, q.y, q.z, q.w)
+        _roll, self._pitch, self._heading = quaternion_to_euler(
+            q.x, q.y, q.z, q.w)
 
     def _on_surface(self, msg: Bool):
         self._surface_detected = msg.data

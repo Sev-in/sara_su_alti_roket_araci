@@ -3,7 +3,7 @@
 <package format="3">
   <name>sara_control</name>
   <version>0.0.0</version>
-  <description>TODO: Package description</description>
+  <description>SARA su alti roket araci kontrol ve donanim entegrasyonu</description>
   <maintainer email="sevin@todo.todo">sevin</maintainer>
   <license>TODO: License declaration</license>
 
@@ -23,7 +23,6 @@
   <exec_depend>launch</exec_depend>
   <exec_depend>launch_ros</exec_depend>
   <exec_depend>mavros</exec_depend>
-  <depend>mavros_msgs</depend>
 
   <export>
     <build_type>ament_python</build_type>

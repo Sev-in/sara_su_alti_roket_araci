@@ -39,47 +39,12 @@ ARGUMANLAR:
                      port cakismamasi icin 'false' verilmelidir.
     fcu_url        : Pixhawk seri portu ve baud hizi.
 
-DUZELTME (v2 - kapsamli denetim): Asagidaki iki KRITIK hata bu surumde
-duzeltilmistir:
+Hardware modunda sensor_get_data basinc, su sensorleri ve MAVROS IMU
+koprusunu tek noktada toplar. actuator_driver ise yalnizca safety
+katmaninin onayladigi komutlari Uno/PCA9685'e iletir.
 
-  1) HARDWARE MODU HICBIR ZAMAN HAREKET ETMIYORDU: Eski surumde 'hardware'
-     modu water_sensor_driver_node + pressure_sensor_driver_node ikilisini
-     baslatiyordu - ancak bu ikili IMU KOPRUSU ICERMIYOR (/sara/imu/data
-     hicbir zaman yayinlanmiyor). navigation_node bu topic olmadan
-     pixhawk_connected=True diyemez -> safety_node'un core_safe'i hicbir
-     zaman True olmaz -> arac SU ALTINDA BILE OLSA HICBIR KOMUT URETILMEZ.
-     DUZELTME: hardware modu artik TEK, DAHA OLGUN bir surucu olan
-     sensor_get_data.py'yi baslatiyor - bu dugum ayni basinc/su
-     sensorlerini KAPSADIGI GIBI /mavros/imu/data -> /sara/imu/data IMU
-     koprusunu de icerir (bkz. sensor_get_data.py, imu_bridge_enabled
-     parametresi varsayilan olarak True). water_sensor_driver_node ve
-     pressure_sensor_driver_node ARTIK BASLATILMIYOR (sensor_get_data.py
-     ile AYNI GPIO pinlerini/I2C adresini actiklari icin CAKISIRLARDI -
-     dosyalarinin kendi basliklarinda da boyle uyarilmislardi).
-
-  2) mission_id TIP UYUSMAZLIGI RISKI: LaunchConfiguration HER ZAMAN
-     STRING uretir, ancak guidance.py'de mission_id INTEGER olarak
-     declare edilmis (declare_parameter('mission_id', 1)). ROS2, launch
-     argumanindan gelen string'i declare edilen int tipiyle otomatik
-     eslestiremeyebilir (InvalidParameterTypeException riski). DUZELTME:
-     ParameterValue(..., value_type=int) ile ACIKCA int'e donusturuluyor.
-
-NOT: 'pixhawk_bridge' ARTIK KULLANILMIYOR - bu donanim topolojisinde
-Pixhawk 6X sadece IMU/telemetri saglar, eyleyicileri SURMEZ (eyleyiciler
-dogrudan Jetson'dan PCA9685 uzerinden surulur, actuator_driver.py).
-
-NOT: mock_sensors.py ve servo_controller.py BILEREK bu launch dosyasina
-DAHIL EDILMEMISTIR:
-  - mock_sensors.py: vehicle_sim.py'nin ACIK CEVRIM (komut dinlemeyen)
-    onculu, vehicle_sim.py tarafindan tamamen ikame edildi.
-  - servo_controller.py: /mavros/imu/data'yi DOGRUDAN okuyup PCA9685
-    servolarini safety_node'un ürettigi /sara/control/fin_command'i
-    HIC DINLEMEDEN suren, TUM guvenlik zincirini (acil durdurma, 60sn
-    motor inhibit, 20 derece kavitasyon limiti) baypas eden, actuator_driver
-    ile CAKISAN eski bir bench-test dosyasidir. UCUS/YARISMA KODUNDA
-    KESINLIKLE KULLANILMAMALIDIR - actuator_driver_node'un yerini
-    TUTAMAZ, sadece o dosyanin kendi docstring'inde de belirtildigi
-    uzere IZOLE bir I2C/servo bench testi icin elle calistirilabilir.
+mission_id, LaunchConfiguration string degerinden ParameterValue ile
+acikca integer tipine donusturulur.
 
 Her node, once kendi config/*.yaml dosyasini okur, SONRA launch
 argumanlari (orn. mission_id) bu degerlerin UZERINE yazar.
@@ -207,13 +172,7 @@ def generate_launch_description():
     )
 
     # ================= GERCEK DONANIM MODU =================
-    # DUZELTME: pixhawk_bridge yerine gercek kablolamaya uygun eyleyici
-    # suruculeri, VE (kritik duzeltme) su/basinc/IMU icin TEK, eksiksiz
-    # bir sensor katmani (sensor_get_data.py) - bkz. modul dokstringi
-    # madde (1). water_sensor_driver_node / pressure_sensor_driver_node
-    # ARTIK BASLATILMIYOR (IMU koprusu icermedikleri icin hardware modunu
-    # hareketsiz birakiyorlardi, ayrica sensor_get_data.py ile ayni
-    # GPIO/I2C kaynaklarini actiklari icin CAKISIRLARDI).
+    # Sensor okuma ve eyleyici uygulama sorumluluklari ayri dugumlerdedir.
     actuator_driver_node = Node(
         package='sara_control',
         executable='actuator_driver',
@@ -295,6 +254,20 @@ def generate_launch_description():
         parameters=[os.path.join(config_dir, 'safety_params.yaml')],
     )
 
+    # Pixhawk IMU + navigasyon derinligi ile dalga etkisini izler.
+    # Bu dugum yalnizca tani/telemetri yayinlar; gorev komutlarini
+    # degistirmez. Esikler deniz rosbag kayitlariyla dogrulanmadan
+    # kontrol zincirine baglanmamalidir.
+    wave_estimator_node = Node(
+        package='sara_control',
+        executable='wave_estimator',
+        name='wave_estimator_node',
+        output='screen',
+        parameters=[
+            os.path.join(config_dir, 'wave_estimator_params.yaml'),
+        ],
+    )
+
     telemetry_node = Node(
         package='sara_control',
         executable='telemetry',
@@ -325,5 +298,6 @@ def generate_launch_description():
         guidance_node,
         autopilot_node,
         safety_node,
+        wave_estimator_node,
         telemetry_node,
     ])
