@@ -13,7 +13,8 @@
 - Ana guc kesme karti kontrol -> Uno D5 (`LOW=enerji var`, `HIGH=kes`)
 - X9C103S INC/U-D/CS -> Uno D8/D9/D10
 - LM2596 enable -> Uno D7 (aktif LOW)
-- Olcum modu butonu -> Uno D2 ile GND arasinda (INPUT_PULLUP)
+- Atesleme fiziksel inhibit / manuel test butonu -> Uno D2 ile GND
+  arasinda (`INPUT_PULLUP`; normal gorevde basili=atesleme bloke)
 
 Bir fiziksel kaynagi yalniz bir node acar. Uno seri portunun tek sahibi
 `actuator_driver`; SEN0257 telemetrisini de bu node yayinlar.
@@ -40,15 +41,33 @@ Gorev 2 aci-yuzey dogrulamasina gecildiginde servo durdurulur.
 
 ## Atesleme cikisi olcum modu
 
-Firmware su anda `ATESLEME_OLCUM_TEST_MODU=true` ile derlenir. Bu modda
-gercek atesleyici baglanmaz ve ROS `IGNITION` komutlari D7 cikisini
-degistiremez. Acilista D7 HIGH tutularak LM2596 kapatilir; X9C103S once
-kalibre edilir, sonra `X9C_3V_ADIMI=35` konumuna getirilir.
+Firmware su anda `ATESLEME_OLCUM_TEST_MODU=true` ile derlenir ve gercek
+atesleyici yerine yalniz multimetre/uygun olcum yuku kullanilir. Acilista
+D7 HIGH tutularak LM2596 kapatilir; X9C103S once kalibre edilir, sonra
+`X9C_3V_ADIMI=35` konumuna getirilir.
 
-D2 butonu birakildiginda D7 HIGH ve cikis 0 V; D2 butonu basiliyken
-D7 LOW ve hedef cikis 3 V'tur. `ALL_STOP` sonrasinda buton
-birakilip yeniden basilana kadar cikis tekrar acilmaz. Bu test yalnizca
-multimetre/uygun olcum yuku ile yapilmalidir.
+Normal gorevde 3 V cikisi yalniz safety katmaninin tum
+yuzey/aci/mesafe kosullarini dogrulayip `launch_command=True` uretmesi,
+heartbeat'in guncel olmasi ve D2 fiziksel inhibit butonunun basili
+OLMAMASI halinde acilir. Cikis en fazla 1 saniye etkin kalir. D2
+basilirsa, heartbeat kaybolursa, `ALL_STOP` veya `IGNITION=0` gelirse
+D7 hemen HIGH olur ve cikis 0 V'a doner.
+
+Eski D2 manuel olcum davranisi silinmemistir; yalniz normal gorevden
+ayrilmistir. Bench launch'ta acikca etkinlestirilir:
+
+```bash
+ros2 launch sara_control imu_actuator_bench.launch.py \
+  enable_motor:=false \
+  enable_ignition_manual_test:=true
+```
+
+Bu modda D2 birakildiginda 0 V, basildiginda yaklasik 3 V gorulur.
+Actuator driver manuel olcum boyunca ESC motor komutunu zorla sifirlar.
+`ALL_STOP` sonrasinda yeniden acilmasi icin D2 once birakilip tekrar
+basilmalidir. Telemetride `ignition_manual_test_active`,
+`ignition_button_pressed` ve `ignition_output_active` alanlari izlenir.
+Manuel test cikisi otomatik Gorev 2 atesleme onayi sayilmaz.
 
 ## ROS veri yolu
 
@@ -72,7 +91,8 @@ dogrudan servo urettigi icin autopilot ve safety katmanlarini baypas eder.
 
 `guidance_node`, Gorev 1/Gorev 2 normal tamamlanmasinda veya
 `GUVENLI_SONLANDIRMA` durumunda `task_complete=True` yayinlar.
-`safety_node` bunu geri alinamayan
+Ek olarak `emergency_stop=True`, motor ve servolari durdurduktan sonra
+ayni kilidi dogrudan etkinlestirir. `safety_node` bu olaylari geri alinamayan
 `/sara/safety/main_power_cutoff_command=True` kilidine cevirir.
 `actuator_driver`, Uno'ya bir kez `POWER_CUTOFF` yollar. Uno once ESC'yi
 notre alir, kanatlari merkezler, siringayi ve ateslemeyi durdurur; sonra

@@ -3,8 +3,10 @@
 
 Bu launch mission_start ve guidance dugumlerini baslatmaz. Burun kapagi
 su sensoru desenini izler. Siringa, enable_surface_servo aciksa surekli
-500 ms 1200 us / 200 ms 1500 us desenini tekrarlar; atesleme her
-dongude False tutulur. Ana guc kesme testi iki ayri onay acildiktan
+500 ms 1200 us / 200 ms 1500 us desenini tekrarlar. Manuel 3 V olcum
+testi ayrica enable_ignition_manual_test ile acikca etkinlestirilebilir;
+otomatik gorev atesleme komutu bench'te False tutulur. Ana guc kesme
+testi iki ayri onay acildiktan
 sonra /sara/bench/power_cutoff_request=True ile testin son adimi olarak
 tetiklenebilir. Komutlar normal safety_node ve actuator_driver zincirinden
 gecmeye devam eder.
@@ -51,6 +53,14 @@ def generate_launch_description():
             'actuator_driver motoru ve ateslemeyi zorla kapali tutar'
         ),
     )
+    ignition_manual_test_arg = DeclareLaunchArgument(
+        'enable_ignition_manual_test',
+        default_value='false',
+        description=(
+            'SADECE MULTIMETRE/LED YUKUYLE: D2 basiliyken 3 V manuel '
+            'olcum testini etkinlestir; bu mod motoru zorla kapatir'
+        ),
+    )
     power_cutoff_arg = DeclareLaunchArgument(
         'enable_power_cutoff_test',
         default_value='false',
@@ -72,6 +82,8 @@ def generate_launch_description():
     confirmed = LaunchConfiguration('confirm_motor_test_safe')
     motor_speed = LaunchConfiguration('motor_test_speed_ms')
     enable_surface_servo = LaunchConfiguration('enable_surface_servo')
+    enable_ignition_manual_test = LaunchConfiguration(
+        'enable_ignition_manual_test')
     enable_power_cutoff = LaunchConfiguration(
         'enable_power_cutoff_test')
     confirm_power_cutoff = LaunchConfiguration(
@@ -82,6 +94,7 @@ def generate_launch_description():
         confirm_arg,
         speed_arg,
         surface_servo_arg,
+        ignition_manual_test_arg,
         power_cutoff_arg,
         power_cutoff_confirm_arg,
         Node(
@@ -99,6 +112,8 @@ def generate_launch_description():
                     'yaw_sign': 1.0,
                     'surface_servo_test_mode': ParameterValue(
                         enable_surface_servo, value_type=bool),
+                    'ignition_manual_test_mode': ParameterValue(
+                        enable_ignition_manual_test, value_type=bool),
                 },
             ],
         ),

@@ -31,6 +31,9 @@ actuator_driver:
     # desenini tekrarlar: 500 ms 1200 us, 200 ms 1500 us.
     # Normal gorevde kesinlikle false kalmalidir.
     surface_servo_test_mode: false
+    # Yalniz bench launch'ta acik onayla true yapilir. Normal gorevde
+    # 3 V cikisi safety tarafindan otomatik yonetilir.
+    ignition_manual_test_mode: false
 
     # Uno, acilista aldigi sifira gore gauge kPa yollar. ROS mesajina
     # donusurken bu yuzey referansi eklenir; navigation.py yine kendi

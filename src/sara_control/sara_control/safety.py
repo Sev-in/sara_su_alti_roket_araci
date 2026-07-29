@@ -45,8 +45,9 @@ Cikti (NIHAI komutlar - Pixhawk/MAVROS koprusu SADECE bunlari dinlemeli):
     /sara/control/launch_command      (std_msgs/Bool)         -- burun ayirma sistemine (atesleme) - SISTEMDE BUNU True YAPABILEN TEK YER
     /sara/safety/approved             (std_msgs/Bool)         -- semadaki "Guvenli Onay?" karari (Evet=True/Hayir=False)
     /sara/safety/fail_safe_active     (std_msgs/Bool)         -- "Hayir" dalinin acik gostergesi (Fail-Safe/Komut Bloke)
-    /sara/safety/main_power_cutoff_command (std_msgs/Bool)    -- Gorev/faz TAMAMLANDIGINDA
-                                                                   veya GUVENLI_SONLANDIRMA'ya girildiginde kilitli True olur.
+    /sara/safety/main_power_cutoff_command (std_msgs/Bool)    -- Gorev/faz TAMAMLANDIGINDA,
+                                                                   GUVENLI_SONLANDIRMA'da veya
+                                                                   emergency_stop=True oldugunda kilitli True olur.
                                                                    actuator_driver bunu Uno POWER_CUTOFF
                                                                    komutuna ve D5 HIGH cikisina cevirir.
     /sara/safety/status               (diagnostic_msgs/DiagnosticStatus)  -- blokaj nedeni dahil
@@ -86,6 +87,8 @@ class SafetyNode(Node):
         self.declare_parameter('request_timeout_s', 0.5)
         self.declare_parameter('water_debounce_s', 0.3)
         self.declare_parameter('nose_cap_latching', True)
+        self.declare_parameter(
+            'power_cutoff_on_emergency_stop', True)
 
         self.nav_status_timeout = self.get_parameter('nav_status_timeout_s').value
         self.motion_permission_timeout = self.get_parameter(
@@ -98,6 +101,9 @@ class SafetyNode(Node):
         self.request_timeout = self.get_parameter('request_timeout_s').value
         self.nose_cap_latching = bool(
             self.get_parameter('nose_cap_latching').value)
+        self.power_cutoff_on_emergency_stop = bool(
+            self.get_parameter(
+                'power_cutoff_on_emergency_stop').value)
         rate = float(self.get_parameter('control_rate_hz').value)
 
         self._thrust_request = 0.0
@@ -269,7 +275,17 @@ class SafetyNode(Node):
         self._depth_valid = values.get('depth_valid', 'False') == 'True'
 
     def _on_emergency_stop(self, msg: Bool):
-        self._emergency_stop = msg.data
+        emergency_active = bool(msg.data)
+        if (
+            emergency_active
+            and self.power_cutoff_on_emergency_stop
+            and not self._main_power_cutoff_latched
+        ):
+            self.get_logger().error(
+                'Acil durdurma: hareket komutlari sifirlandi ve '
+                'ana guc kesme kilitlendi.')
+            self._main_power_cutoff_latched = True
+        self._emergency_stop = emergency_active
 
     def _on_leak(self, msg: Bool):
         self._leak_detected = msg.data

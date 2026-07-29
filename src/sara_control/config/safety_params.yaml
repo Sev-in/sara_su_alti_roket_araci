@@ -17,3 +17,6 @@ safety_node:
     water_debounce_s: 0.3
     # Gercek gorevde acilan burun kapagi tekrar kapanmasin.
     nose_cap_latching: true
+    # Acil durdurma Uno D5 HIGH ile ana guc kesmeyi kilitler.
+    # Yeniden acma fiziksel reset/guc dongusu gerektirir.
+    power_cutoff_on_emergency_stop: true

@@ -3,6 +3,7 @@ import unittest
 
 from sara_control.uno_protocol import (
     gauge_kpa_to_absolute_pa,
+    ignition_output_confirms_command,
     normalized_fin_to_servo,
     normalized_thrust,
     parse_telemetry_line,
@@ -51,6 +52,14 @@ class UnoProtocolTests(unittest.TestCase):
         self.assertEqual(normalized_thrust(2.0), 1.0)
         with self.assertRaises(ValueError):
             normalized_thrust(math.nan)
+
+    def test_ignition_confirmation_requires_command_and_output(self):
+        self.assertTrue(
+            ignition_output_confirms_command(True, True))
+        self.assertFalse(
+            ignition_output_confirms_command(True, False))
+        self.assertFalse(
+            ignition_output_confirms_command(False, True))
 
 
 if __name__ == '__main__':

@@ -28,6 +28,7 @@ from std_msgs.msg import Bool, Float64
 
 from sara_control.uno_protocol import (
     gauge_kpa_to_absolute_pa,
+    ignition_output_confirms_command,
     normalized_fin_to_servo,
     normalized_thrust,
     parse_telemetry_line,
@@ -60,6 +61,7 @@ class ActuatorDriverNode(Node):
         self.declare_parameter('nose_open_deg', 90.0)
         self.declare_parameter('buoyancy_surface_threshold', -0.05)
         self.declare_parameter('surface_servo_test_mode', False)
+        self.declare_parameter('ignition_manual_test_mode', False)
 
         self.declare_parameter('surface_reference_pa', 101325.0)
         self.declare_parameter('pressure_variance_pa2', 0.0)
@@ -91,6 +93,8 @@ class ActuatorDriverNode(Node):
             self.get_parameter('buoyancy_surface_threshold').value)
         self.surface_servo_test_mode = bool(
             self.get_parameter('surface_servo_test_mode').value)
+        self.ignition_manual_test_mode = bool(
+            self.get_parameter('ignition_manual_test_mode').value)
 
         self.surface_reference = float(
             self.get_parameter('surface_reference_pa').value)
@@ -174,6 +178,8 @@ class ActuatorDriverNode(Node):
         self._ignition_output_active = False
         self._ignition_measurement_mode = False
         self._ignition_button_pressed = False
+        self._ignition_manual_mode_active = False
+        self._ignition_mode_configured = False
 
         self._connect()
 
@@ -194,8 +200,12 @@ class ActuatorDriverNode(Node):
             self.get_logger().warning(
                 'D6 SIRINGA TEST MODU ETKIN: Uno D6 servosu 500 ms '
                 '1200 us / 200 ms 1500 us desenini tekrarlayacak; '
-                'motor ve atesleme actuator_driver tarafinda zorla '
+                'motor ve otomatik atesleme actuator_driver tarafinda zorla '
                 'guvenli tutulacak.')
+        if self.ignition_manual_test_mode:
+            self.get_logger().warning(
+                'D2 MANUEL 3 V OLCUM TESTI ETKIN: gercek atesleyici '
+                'baglanmamis, yalniz multimetre/LED yuku kullanilmalidir.')
 
     def _connect(self):
         self._last_connect_attempt = time.monotonic()
@@ -247,6 +257,8 @@ class ActuatorDriverNode(Node):
         self._ignition_output_active = False
         self._ignition_measurement_mode = False
         self._ignition_button_pressed = False
+        self._ignition_manual_mode_active = False
+        self._ignition_mode_configured = False
         self._uno_ready = False
         self._uno_ready_deadline = math.inf
         self._ready_timeout_reported = False
@@ -354,6 +366,9 @@ class ActuatorDriverNode(Node):
             or not self._controls_fresh()
         )
         if blocked:
+            if self._ignition_mode_configured:
+                self._write('IGNITION_TEST_MODE=0')
+                self._ignition_mode_configured = False
             self._write('ALL_STOP')
             self._surface_running = False
             self._ignition_commanded = False
@@ -361,18 +376,31 @@ class ActuatorDriverNode(Node):
             self._motor_armed = False
             self._arm_requested = False
             return
+        if not self._ignition_mode_configured:
+            if self._write(
+                'IGNITION_TEST_MODE=1'
+                if self.ignition_manual_test_mode
+                else 'IGNITION_TEST_MODE=0'
+            ):
+                self._ignition_mode_configured = True
+            return
 
         # ESC, hareket izni gelmeden once NOTR komutta arm edilir. Arming
         # hareket degildir; safety thrust_command=0 tuttugu icin 60 sn
         # inhibit korunur. Boylece izin aninda 3 sn ESC beklemesi Gorev 2
         # yarismasinin 60 sn sayacindan yenmez.
-        if not self.surface_servo_test_mode and not self._motor_armed:
+        if (
+            not self.surface_servo_test_mode
+            and not self.ignition_manual_test_mode
+            and not self._motor_armed
+        ):
             if not self._arm_requested:
                 self._write('MOTOR_ARM')
                 self._arm_requested = True
 
         thrust = self._thrust if (
             not self.surface_servo_test_mode
+            and not self.ignition_manual_test_mode
             and
             self._motion_permission and self._motor_armed) else 0.0
         self._write(f'THRUST={thrust:.3f}')
@@ -411,6 +439,7 @@ class ActuatorDriverNode(Node):
 
         ignition_requested = (
             not self.surface_servo_test_mode
+            and not self.ignition_manual_test_mode
             and
             self._launch_request
             and self._motion_permission
@@ -485,6 +514,8 @@ class ActuatorDriverNode(Node):
             self._ignition_output_active = False
             self._ignition_measurement_mode = False
             self._ignition_button_pressed = False
+            self._ignition_manual_mode_active = False
+            self._ignition_mode_configured = False
             self._power_cutoff_commanded = False
             self._power_cutoff_confirmed = False
             self._motor_state = 'READY'
@@ -498,9 +529,18 @@ class ActuatorDriverNode(Node):
             self._arm_requested = False
             self._motor_state = 'ARMED'
             return
-        if line == 'OK,IGNITION_ACTIVE':
+        if line in (
+            'OK,IGNITION_ACTIVE',
+            'OK,IGNITION_MEASUREMENT_ACTIVE',
+        ):
             # Bu yalnizca komutun kabul edildigini bildirir. Gercek aktif
             # durumu, Uno telemetrisindeki ignition_active alanindan gelir.
+            return
+        if line == 'OK,IGNITION_MANUAL_TEST_ON':
+            self._ignition_manual_mode_active = True
+            return
+        if line == 'OK,IGNITION_MANUAL_TEST_OFF':
+            self._ignition_manual_mode_active = False
             return
         if line == 'OK,IGNITION_OFF':
             self._ignition_confirmed = False
@@ -581,15 +621,26 @@ class ActuatorDriverNode(Node):
                     int(values['ignition_button_pressed']) == 1)
             except (TypeError, ValueError, OverflowError):
                 self._ignition_button_pressed = False
+        if 'ignition_manual_test_mode' in values:
+            try:
+                self._ignition_manual_mode_active = (
+                    int(values['ignition_manual_test_mode']) == 1)
+            except (TypeError, ValueError, OverflowError):
+                self._ignition_manual_mode_active = False
         if 'ignition_active' in values:
             try:
                 self._ignition_output_active = (
                     int(values['ignition_active']) == 1)
-                # D2 ile yapilan 3 V olcum testi gercek atesleme onayi
-                # sayilmaz ve Gorev 2'yi tamamlamaz.
+                # Olcum modunda da cikis artik yalniz safety tarafindan
+                # onaylanan ROS komutuyla acilir. Bu nedenle gercek yuk
+                # yerine multimetrede gorulen 3 V, komut zincirinin
+                # basarili onayidir. Manuel/istenmeyen bir cikis ise
+                # ignition_commanded=False oldugu icin onay sayilmaz.
                 self._ignition_confirmed = (
-                    self._ignition_output_active
-                    and not self._ignition_measurement_mode)
+                    ignition_output_confirms_command(
+                        self._ignition_output_active,
+                        self._ignition_commanded,
+                    ))
             except (TypeError, ValueError, OverflowError):
                 self._ignition_output_active = False
                 self._ignition_confirmed = False
@@ -661,6 +712,9 @@ class ActuatorDriverNode(Node):
             status.level = DiagnosticStatus.WARN
             status.message = (
                 'D6 siringa 1200/1500 us darbe deseni testi etkin')
+        elif self.ignition_manual_test_mode:
+            status.level = DiagnosticStatus.WARN
+            status.message = 'D2 manuel 3 V olcum testi etkin'
         else:
             status.level = DiagnosticStatus.OK
             status.message = 'Nominal'
@@ -707,6 +761,12 @@ class ActuatorDriverNode(Node):
             KeyValue(
                 key='ignition_measurement_mode',
                 value=str(self._ignition_measurement_mode)),
+            KeyValue(
+                key='ignition_manual_test_requested',
+                value=str(self.ignition_manual_test_mode)),
+            KeyValue(
+                key='ignition_manual_test_active',
+                value=str(self._ignition_manual_mode_active)),
             KeyValue(
                 key='ignition_button_pressed',
                 value=str(self._ignition_button_pressed)),

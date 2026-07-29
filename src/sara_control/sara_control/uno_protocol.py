@@ -37,6 +37,11 @@ def normalized_thrust(command):
     return clamp(value, 0.0, 1.0)
 
 
+def ignition_output_confirms_command(output_active, command_active):
+    """Uno cikisi yalniz etkin bir ROS komutuyla eslesiyorsa onayla."""
+    return bool(output_active) and bool(command_active)
+
+
 def parse_telemetry_line(line):
     """Uno'nun ``anahtar=deger`` telemetri satirini ayristir.
 

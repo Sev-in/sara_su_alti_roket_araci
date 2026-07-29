@@ -118,6 +118,7 @@ bool ateslemeIstegi = false;
 unsigned long ateslemeBaslangicMs = 0;
 int x9cMevcutAdim = 99;
 bool ateslemeButonuBasili = false;
+bool ateslemeManuelTestModu = false;
 bool ateslemeOlcumBirakmaBekliyor = true;
 
 float sifirSensorGerilimi = 0.0f;
@@ -186,9 +187,7 @@ void ateslemeyiKapat()
   ateslemeIstegi = false;
   digitalWrite(LM2596_ENABLE_PINI, HIGH);
   digitalWrite(DURUM_LED_PINI, LOW);
-  if (ATESLEME_OLCUM_TEST_MODU) {
-    // ALL_STOP veya benzeri bir kesmeden sonra buton birakilmadan
-    // cikisin yeniden acilmasina izin verme.
+  if (ateslemeManuelTestModu) {
     ateslemeOlcumBirakmaBekliyor = true;
   }
 }
@@ -238,11 +237,15 @@ void x9cHedefAdimaGit(int hedefAdim)
   x9cMevcutAdim = hedefAdim;
 }
 
-void ateslemeOlcumModunuGuncelle()
+void ateslemeManuelTestiniGuncelle()
 {
   ateslemeButonuBasili =
       digitalRead(ATESLEME_FIZIKSEL_PINI) == LOW;
 
+  if (!heartbeatGuncel()) {
+    ateslemeyiKapat();
+    return;
+  }
   if (!ateslemeButonuBasili) {
     ateslemeIstegi = false;
     digitalWrite(LM2596_ENABLE_PINI, HIGH);
@@ -250,7 +253,6 @@ void ateslemeOlcumModunuGuncelle()
     ateslemeOlcumBirakmaBekliyor = false;
     return;
   }
-
   if (ateslemeOlcumBirakmaBekliyor) {
     ateslemeIstegi = false;
     digitalWrite(LM2596_ENABLE_PINI, HIGH);
@@ -392,11 +394,26 @@ void komutuIsle(char *komut)
     servoAciYaz(BURUN_SERVO_KANALI, burunServoAcisi);
     return;
   }
+  if (komuttanFloatOku(komut, "IGNITION_TEST_MODE=", deger)) {
+    ateslemeyiKapat();
+    if (deger >= 0.5f) {
+      if (!ATESLEME_OLCUM_TEST_MODU) {
+        Serial.println(F("ERR,IGNITION_TEST_MODE_DISABLED"));
+      } else {
+        ateslemeManuelTestModu = true;
+        ateslemeOlcumBirakmaBekliyor = true;
+        Serial.println(F("OK,IGNITION_MANUAL_TEST_ON"));
+      }
+    } else {
+      ateslemeManuelTestModu = false;
+      Serial.println(F("OK,IGNITION_MANUAL_TEST_OFF"));
+    }
+    return;
+  }
   if (komuttanFloatOku(komut, "IGNITION=", deger)) {
-    if (ATESLEME_OLCUM_TEST_MODU) {
-      // Olcum modunda cikisin tek sahibi fiziksel D2 butonudur.
-      // ROS komutu kabul edilir fakat D7 cikisini degistirmez.
-      Serial.println(F("OK,IGNITION_MEASUREMENT_MODE_D2"));
+    if (ateslemeManuelTestModu) {
+      ateslemeyiKapat();
+      Serial.println(F("ERR,IGNITION_MANUAL_TEST_MODE"));
       return;
     }
     if (deger >= 0.5f) {
@@ -409,7 +426,11 @@ void komutuIsle(char *komut)
       } else {
         ateslemeIstegi = true;
         ateslemeBaslangicMs = millis();
-        Serial.println(F("OK,IGNITION_ACTIVE"));
+        if (ATESLEME_OLCUM_TEST_MODU) {
+          Serial.println(F("OK,IGNITION_MEASUREMENT_ACTIVE"));
+        } else {
+          Serial.println(F("OK,IGNITION_ACTIVE"));
+        }
       }
     } else {
       ateslemeyiKapat();
@@ -569,12 +590,14 @@ void guvenligiGuncelle()
     Serial.println(F("ERR,HEARTBEAT_LOST_SURFACE_STOPPED"));
   }
 
-  if (ATESLEME_OLCUM_TEST_MODU) {
-    ateslemeOlcumModunuGuncelle();
+  if (ATESLEME_OLCUM_TEST_MODU && ateslemeManuelTestModu) {
+    ateslemeManuelTestiniGuncelle();
     return;
   }
 
-  bool fizikselInhibit = digitalRead(ATESLEME_FIZIKSEL_PINI) == LOW;
+  ateslemeButonuBasili =
+      digitalRead(ATESLEME_FIZIKSEL_PINI) == LOW;
+  bool fizikselInhibit = ateslemeButonuBasili;
   bool ateslemeZamanAsimi =
       millis() - ateslemeBaslangicMs > ATESLEME_MAKS_SURE_MS;
   if (ateslemeIstegi &&
@@ -647,6 +670,8 @@ void basinciOkuVeYayinla()
   Serial.print(yuzeyServoHareketFazi ? 1 : 0);
   Serial.print(F(",ignition_measurement_mode="));
   Serial.print(ATESLEME_OLCUM_TEST_MODU ? 1 : 0);
+  Serial.print(F(",ignition_manual_test_mode="));
+  Serial.print(ateslemeManuelTestModu ? 1 : 0);
   Serial.print(F(",ignition_button_pressed="));
   Serial.print(ateslemeButonuBasili ? 1 : 0);
   Serial.print(F(",ignition_active="));
@@ -678,7 +703,7 @@ void setup()
   if (ATESLEME_OLCUM_TEST_MODU) {
     x9cKalibreEt();
     x9cHedefAdimaGit(X9C_3V_ADIMI);
-    Serial.println(F("INFO,IGNITION_MEASUREMENT_MODE_D2_READY"));
+    Serial.println(F("INFO,IGNITION_MEASUREMENT_MODE_ROS_READY"));
   }
   Wire.begin();
   pwm.begin();
