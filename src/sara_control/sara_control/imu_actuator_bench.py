@@ -53,6 +53,7 @@ class ImuActuatorBench(Node):
             'confirm_power_cutoff_test_safe', False)
         self.declare_parameter('pitch_max_angle_deg', 35.0)
         self.declare_parameter('yaw_max_angle_deg', 35.0)
+        self.declare_parameter('pitch_gain', 2.0)
         self.declare_parameter('gain', 1.0)
         self.declare_parameter('sign_pitch', -1.0)
         self.declare_parameter('sign_roll', -1.0)
@@ -96,6 +97,8 @@ class ImuActuatorBench(Node):
             1e-6, float(self.get_parameter('pitch_max_angle_deg').value))
         self._yaw_max = max(
             1e-6, float(self.get_parameter('yaw_max_angle_deg').value))
+        self._pitch_gain = max(
+            0.0, float(self.get_parameter('pitch_gain').value))
         self._gain = float(self.get_parameter('gain').value)
         self._sign_pitch = float(
             self.get_parameter('sign_pitch').value)
@@ -187,7 +190,8 @@ class ImuActuatorBench(Node):
                 'D5 HIGH kilitlenecek ve test sona erecek.')
         self.get_logger().info(
             'Standalone ile uyumlu servo modu: CH1=pitch +-'
-            f'{self._pitch_max:.0f} deg, CH2=baskin roll/yaw +-'
+            f'{self._pitch_max:.0f} deg (gain={self._pitch_gain:.2f}), '
+            'CH2=baskin roll/yaw +-'
             f'{self._yaw_max:.0f} deg.')
 
     def _on_navigation_status(self, msg):
@@ -263,7 +267,7 @@ class ImuActuatorBench(Node):
         delta_pitch = math.degrees(relative_pitch)
 
         self._pitch_offset = clamp(
-            self._sign_pitch * self._gain * delta_pitch,
+            self._sign_pitch * self._pitch_gain * delta_pitch,
             -self._pitch_max,
             self._pitch_max,
         )
