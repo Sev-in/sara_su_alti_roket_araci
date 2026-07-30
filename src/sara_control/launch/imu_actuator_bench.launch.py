@@ -44,14 +44,6 @@ def generate_launch_description():
         default_value='0.15',
         description='Bench motor hedef hizi; kod tarafinda en fazla 0.70 m/s',
     )
-    pitch_gain_arg = DeclareLaunchArgument(
-        'pitch_gain',
-        default_value='2.0',
-        description=(
-            'CH1 pitch hassasiyeti; 2.0 ile 17.5 derece Pixhawk pitch '
-            'hareketi servoda merkezden 35 derece uretir'
-        ),
-    )
     surface_servo_arg = DeclareLaunchArgument(
         'enable_surface_servo',
         default_value='false',
@@ -89,7 +81,6 @@ def generate_launch_description():
     enable_motor = LaunchConfiguration('enable_motor')
     confirmed = LaunchConfiguration('confirm_motor_test_safe')
     motor_speed = LaunchConfiguration('motor_test_speed_ms')
-    pitch_gain = LaunchConfiguration('pitch_gain')
     enable_surface_servo = LaunchConfiguration('enable_surface_servo')
     enable_ignition_manual_test = LaunchConfiguration(
         'enable_ignition_manual_test')
@@ -102,7 +93,6 @@ def generate_launch_description():
         enable_motor_arg,
         confirm_arg,
         speed_arg,
-        pitch_gain_arg,
         surface_servo_arg,
         ignition_manual_test_arg,
         power_cutoff_arg,
@@ -171,8 +161,6 @@ def generate_launch_description():
                         confirmed, value_type=bool),
                     'motor_test_speed_ms': ParameterValue(
                         motor_speed, value_type=float),
-                    'pitch_gain': ParameterValue(
-                        pitch_gain, value_type=float),
                     'enable_power_cutoff_test': ParameterValue(
                         enable_power_cutoff, value_type=bool),
                     'confirm_power_cutoff_test_safe': ParameterValue(

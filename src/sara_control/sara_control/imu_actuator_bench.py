@@ -53,7 +53,7 @@ class ImuActuatorBench(Node):
             'confirm_power_cutoff_test_safe', False)
         self.declare_parameter('pitch_max_angle_deg', 35.0)
         self.declare_parameter('yaw_max_angle_deg', 35.0)
-        self.declare_parameter('pitch_gain', 2.0)
+        self.declare_parameter('pitch_gain', 4.0)
         self.declare_parameter('gain', 1.0)
         self.declare_parameter('sign_pitch', -1.0)
         self.declare_parameter('sign_roll', -1.0)

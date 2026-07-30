@@ -139,7 +139,7 @@ class AutopilotNode(Node):
         self.declare_parameter('depth_trim_limit_rad', 0.35)   # ~20 derece azami pitch trimi
 
         # --- Pitch dongusu (kanatcik/elevator) ---
-        self.declare_parameter('pitch_kp', 1.2)
+        self.declare_parameter('pitch_kp', 4.0)
         self.declare_parameter('pitch_ki', 0.05)
         self.declare_parameter('pitch_kd', 0.3)
         self.declare_parameter('fin_pitch_limit', 1.0)          # normalize [-1,1]

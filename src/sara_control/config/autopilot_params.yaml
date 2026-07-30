@@ -14,7 +14,9 @@ autopilot_node:
     depth_trim_limit_rad: 0.35        # ~20 derece azami pitch trimi
 
     # --- Pitch dongusu (kanatcik/elevator) ---
-    pitch_kp: 1.2
+    # Kalici CH1 pitch tepkisi: Gorev 1, Gorev 2 ve VIDEO_DEMO ayni
+    # autopilot ayarini kullanir. Launch sirasinda ayrica verilmez.
+    pitch_kp: 4.0
     pitch_ki: 0.05
     pitch_kd: 0.3
     fin_pitch_limit: 1.0              # normalize [-1,1]

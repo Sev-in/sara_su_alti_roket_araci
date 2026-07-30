@@ -15,9 +15,10 @@ imu_actuator_bench:
     max_calibrated_speed_ms: 1.076
     pitch_max_angle_deg: 35.0
     yaw_max_angle_deg: 35.0
-    # CH1 hassasiyeti: 2.0 ile 17.5 derece bagil pitch, servoda
+    # CH1 hassasiyeti: 4.0 ile 8.75 derece bagil pitch, servoda
     # merkezden 35 derece (55/125 derece siniri) uretir.
-    pitch_gain: 2.0
+    # Tum bench testlerinde kalici kullanilir; launch argumani gerekmez.
+    pitch_gain: 4.0
     # CH2'nin mevcut roll/yaw test kazanci; CH1 artik bunu kullanmaz.
     gain: 1.0
     sign_pitch: -1.0
