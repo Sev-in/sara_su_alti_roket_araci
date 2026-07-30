@@ -50,6 +50,60 @@ def euler_to_quaternion(
     )
 
 
+def quaternion_multiply(
+    left: Tuple[float, float, float, float],
+    right: Tuple[float, float, float, float],
+) -> Tuple[float, float, float, float]:
+    """Iki ``(x, y, z, w)`` quaternionunun carpimini verir."""
+    lx, ly, lz, lw = left
+    rx, ry, rz, rw = right
+    return (
+        lw * rx + lx * rw + ly * rz - lz * ry,
+        lw * ry - lx * rz + ly * rw + lz * rx,
+        lw * rz + lx * ry - ly * rx + lz * rw,
+        lw * rw - lx * rx - ly * ry - lz * rz,
+    )
+
+
+def normalize_quaternion(
+    quaternion: Tuple[float, float, float, float],
+) -> Tuple[float, float, float, float]:
+    """Quaternionu normalize eder; gecersiz sifir quaternionu reddeder."""
+    norm = math.sqrt(sum(component * component for component in quaternion))
+    if norm <= 1e-12:
+        raise ValueError('Quaternion normu sifir olamaz')
+    return tuple(component / norm for component in quaternion)
+
+
+def relative_quaternion(
+    reference: Tuple[float, float, float, float],
+    current: Tuple[float, float, float, float],
+) -> Tuple[float, float, float, float]:
+    """Baslangic yoneliminden guncel yonelime bagil donusu verir.
+
+    Mutlak Euler acilarini birbirinden cikarmak yerine
+    ``inverse(reference) * current`` hesaplanir. Boylece farkli sabit
+    Pixhawk montaj acilarinda pitch ekseninin roll/yaw ile karismasi
+    onlenir.
+    """
+    reference = normalize_quaternion(reference)
+    current = normalize_quaternion(current)
+    reference_inverse = (
+        -reference[0],
+        -reference[1],
+        -reference[2],
+        reference[3],
+    )
+    relative = normalize_quaternion(
+        quaternion_multiply(reference_inverse, current))
+
+    # q ve -q ayni donusu temsil eder. Pozitif w secmek, isaret
+    # gecislerinde sayisal surekliligi iyilestirir.
+    if relative[3] < 0.0:
+        relative = tuple(-component for component in relative)
+    return relative
+
+
 def quaternion_to_euler(
     x: float,
     y: float,

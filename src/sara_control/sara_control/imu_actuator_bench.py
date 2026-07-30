@@ -24,7 +24,13 @@ from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
 from std_msgs.msg import Bool, Float64
 
-from sara_control.math_utils import angle_diff_deg, clamp, quaternion_to_euler
+from sara_control.math_utils import (
+    angle_diff_deg,
+    clamp,
+    normalize_quaternion,
+    quaternion_to_euler,
+    relative_quaternion,
+)
 from sara_control.sensor_processing import DebouncedBoolean
 
 
@@ -104,6 +110,7 @@ class ImuActuatorBench(Node):
 
         self._navigation_ready = False
         self._reference = None
+        self._reference_quaternion = None
         self._last_odom_time = None
         self._pitch_offset = 0.0
         self._yaw_offset = 0.0
@@ -220,20 +227,40 @@ class ImuActuatorBench(Node):
 
     def _on_odom(self, msg):
         self._last_odom_time = self.get_clock().now()
-        angles = quaternion_to_euler_deg(msg.pose.pose.orientation)
+        orientation = msg.pose.pose.orientation
+        current_quaternion = (
+            orientation.x,
+            orientation.y,
+            orientation.z,
+            orientation.w,
+        )
+        try:
+            current_quaternion = normalize_quaternion(current_quaternion)
+        except ValueError:
+            self.get_logger().warn(
+                'Gecersiz IMU quaternionu; servo komutu guncellenmedi.',
+                throttle_duration_sec=1.0,
+            )
+            return
+        angles = quaternion_to_euler_deg(orientation)
 
         if self._reference is None:
             if not self._navigation_ready:
                 return
             self._reference = angles
+            self._reference_quaternion = current_quaternion
             self.get_logger().info(
                 'IMU referansi alindi: '
                 f'roll={angles[0]:.1f}, pitch={angles[1]:.1f}, '
                 f'yaw={angles[2]:.1f}.')
 
         delta_roll = angle_diff_deg(angles[0], self._reference[0])
-        delta_pitch = angle_diff_deg(angles[1], self._reference[1])
         delta_yaw = angle_diff_deg(angles[2], self._reference[2])
+        relative = relative_quaternion(
+            self._reference_quaternion, current_quaternion)
+        _relative_roll, relative_pitch, _relative_yaw = (
+            quaternion_to_euler(*relative))
+        delta_pitch = math.degrees(relative_pitch)
 
         self._pitch_offset = clamp(
             self._sign_pitch * self._gain * delta_pitch,
