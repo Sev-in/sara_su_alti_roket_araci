@@ -38,6 +38,21 @@ from sara_control.uno_protocol import (
 class ActuatorDriverNode(Node):
     """Onayli ROS komutlarini guvenli Uno komutlarina donusturur."""
 
+    _READY_TELEMETRY_KEYS = frozenset({
+        'voltage_v',
+        'pressure_kpa',
+        'depth_m',
+        'esc_us',
+        'motor_state',
+        'heartbeat_ok',
+        'pitch_deg',
+        'yaw_deg',
+        'nose_deg',
+        'surface_running',
+        'ignition_active',
+    })
+    _READY_TELEMETRY_COUNT = 3
+
     def __init__(self):
         super().__init__('actuator_driver')
 
@@ -153,6 +168,8 @@ class ActuatorDriverNode(Node):
         self._serial_lock = threading.Lock()
         self._rx_buffer = bytearray()
         self._uno_ready = False
+        self._uno_ready_source = '-'
+        self._valid_telemetry_streak = 0
         self._uno_ready_deadline = math.inf
         self._ready_timeout_reported = False
         self._last_connect_attempt = 0.0
@@ -233,6 +250,8 @@ class ActuatorDriverNode(Node):
             # Uno, seri port acilinca DTR nedeniyle yeniden baslayabilir.
             # READY gelene kadar heartbeat/eyleyici komutu gonderilmez.
             self._uno_ready = False
+            self._uno_ready_source = '-'
+            self._valid_telemetry_streak = 0
             self._uno_ready_deadline = (
                 time.monotonic() + max(1.0, self.ready_timeout))
             self._ready_timeout_reported = False
@@ -273,6 +292,8 @@ class ActuatorDriverNode(Node):
         self._ignition_manual_mode_active = False
         self._ignition_mode_configured = False
         self._uno_ready = False
+        self._uno_ready_source = '-'
+        self._valid_telemetry_streak = 0
         self._uno_ready_deadline = math.inf
         self._ready_timeout_reported = False
         self._motor_state = 'DISCONNECTED'
@@ -286,6 +307,38 @@ class ActuatorDriverNode(Node):
             and getattr(self._serial, 'is_open', False)
             and self._uno_ready
         )
+
+    def _mark_uno_ready(self, source):
+        """READY satiri veya dogrulanmis telemetriyle Uno'yu hazirla."""
+        self._uno_ready = True
+        self._uno_ready_source = source
+        self._ready_timeout_reported = False
+        self._motor_armed = False
+        self._arm_requested = False
+        self._heartbeat_confirmed = False
+        self._surface_running = False
+        self._surface_running_confirmed = False
+        self._surface_pulse_confirmed = False
+        self._ignition_commanded = False
+        self._ignition_confirmed = False
+        self._ignition_output_active = False
+        self._ignition_measurement_mode = False
+        self._ignition_button_pressed = False
+        self._ignition_manual_mode_active = False
+        self._ignition_mode_configured = False
+        self._power_cutoff_commanded = False
+        self._power_cutoff_confirmed = False
+        self._motor_state = 'READY'
+        self._last_error = '-'
+        self._write('HB')
+
+        if source == 'ready_message':
+            self.get_logger().info(
+                'Uno kalibrasyonu tamamlandi; komut iletimi etkin.')
+        else:
+            self.get_logger().warning(
+                'Uno READY satiri kacirildi; art arda gelen 3 tam ve '
+                'gecerli telemetri paketiyle komut iletimi etkinlestirildi.')
 
     def _write(self, command):
         if not self._serial_ready():
@@ -514,34 +567,15 @@ class ActuatorDriverNode(Node):
     def _handle_serial_line(self, line):
         if line == 'INFO,CALIBRATION_START':
             self._uno_ready = False
+            self._uno_ready_source = '-'
+            self._valid_telemetry_streak = 0
             self._motor_state = 'CALIBRATING'
             return
         if line == 'INFO,CALIBRATION_DONE':
             self._motor_state = 'WAITING_FOR_READY'
             return
         if line == 'READY,SARA_UNO_CONTROLLER_V2':
-            self._uno_ready = True
-            self._ready_timeout_reported = False
-            self._motor_armed = False
-            self._arm_requested = False
-            self._heartbeat_confirmed = False
-            self._surface_running = False
-            self._surface_running_confirmed = False
-            self._surface_pulse_confirmed = False
-            self._ignition_commanded = False
-            self._ignition_confirmed = False
-            self._ignition_output_active = False
-            self._ignition_measurement_mode = False
-            self._ignition_button_pressed = False
-            self._ignition_manual_mode_active = False
-            self._ignition_mode_configured = False
-            self._power_cutoff_commanded = False
-            self._power_cutoff_confirmed = False
-            self._motor_state = 'READY'
-            self._last_error = '-'
-            self._write('HB')
-            self.get_logger().info(
-                'Uno kalibrasyonu tamamlandi; komut iletimi etkin.')
+            self._mark_uno_ready('ready_message')
             return
         if line == 'OK,MOTOR_ARMED':
             self._motor_armed = True
@@ -598,6 +632,16 @@ class ActuatorDriverNode(Node):
         values = parse_telemetry_line(line)
         if not values:
             return
+        if not self._uno_ready:
+            if self._READY_TELEMETRY_KEYS.issubset(values):
+                self._valid_telemetry_streak += 1
+                if (
+                    self._valid_telemetry_streak
+                    >= self._READY_TELEMETRY_COUNT
+                ):
+                    self._mark_uno_ready('telemetry_fallback')
+            else:
+                self._valid_telemetry_streak = 0
         if 'motor_state' in values:
             try:
                 self._motor_state = str(int(values['motor_state']))
@@ -745,6 +789,12 @@ class ActuatorDriverNode(Node):
             KeyValue(
                 key='surface_servo_test_pulse_us',
                 value=str(self.surface_servo_test_pulse_us)),
+            KeyValue(
+                key='uno_ready_source',
+                value=self._uno_ready_source),
+            KeyValue(
+                key='valid_telemetry_streak',
+                value=str(self._valid_telemetry_streak)),
             KeyValue(key='serial_ready', value=str(serial_ok)),
             KeyValue(
                 key='serial_rx_age_s',
