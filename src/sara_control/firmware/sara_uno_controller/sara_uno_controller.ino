@@ -63,13 +63,13 @@ const unsigned long ARM_BEKLEME_MS = 3000;
 // D6 siringa servosu. D6 yalnizca sinyal uretir; servo kesinlikle
 // Uno 5 V pininden beslenmemelidir. Gercek gorevlerde yalnizca suyu
 // disari itme yonu kullanilir:
-//   1900 us / 1000 ms calis -> 1500 us / 200 ms notr
-// Test modunda ise mekanik yon kontrolu icin 1100 ve 1900 us sirayla denenir.
+//   1800 us / 500 ms calis -> 1500 us / 200 ms notr
+// Test modunda ise mekanik yon kontrolu icin 1200 ve 1800 us sirayla denenir.
 const uint8_t YUZEY_SERVO_PINI = 6;
 const uint16_t YUZEY_SERVO_DUR_US = 1500;
-const uint16_t YUZEY_SERVO_SUYU_ICERI_CEK_US = 1100;
-const uint16_t YUZEY_SERVO_SUYU_DISARI_IT_US = 1900;
-const unsigned long YUZEY_SERVO_CALIS_SURESI_MS = 1000;
+const uint16_t YUZEY_SERVO_SUYU_ICERI_CEK_US = 1200;
+const uint16_t YUZEY_SERVO_SUYU_DISARI_IT_US = 1800;
+const unsigned long YUZEY_SERVO_CALIS_SURESI_MS = 500;
 const unsigned long YUZEY_SERVO_DUR_SURESI_MS = 200;
 
 // ---------------- Guvenlik ----------------
@@ -486,7 +486,7 @@ void komutuIsle(char *komut)
       yuzeyServosunuDurdur();
       Serial.println(F("ERR,HEARTBEAT_REQUIRED"));
     } else {
-      // Gercek gorev: yalnizca 1900 us ile suyu disari it.
+      // Gercek gorev: yalnizca 1800 us ile suyu disari it.
       yuzeyServosunuBaslat(YUZEY_SERVO_SUYU_DISARI_IT_US, false);
       Serial.println(F("OK,SURFACE_PULSE_RUNNING"));
     }
@@ -497,7 +497,7 @@ void komutuIsle(char *komut)
       yuzeyServosunuDurdur();
       Serial.println(F("ERR,HEARTBEAT_REQUIRED"));
     } else {
-      // Yalnizca test: 1100 us ile suyu iceri cek.
+      // Yalnizca test: 1200 us ile suyu iceri cek.
       yuzeyServosunuBaslat(YUZEY_SERVO_SUYU_ICERI_CEK_US, false);
       Serial.println(F("OK,SURFACE_RETRACT_RUNNING"));
     }
@@ -509,7 +509,7 @@ void komutuIsle(char *komut)
       yuzeyServosunuDurdur();
       Serial.println(F("ERR,HEARTBEAT_REQUIRED"));
     } else {
-      // Yalnizca test: 1100 ve 1900 us yonlerini sirayla dene.
+      // Yalnizca test: 1200 ve 1800 us yonlerini sirayla dene.
       yuzeyServosunuBaslat(YUZEY_SERVO_SUYU_ICERI_CEK_US, true);
       Serial.println(F("OK,SURFACE_TEST_RUNNING"));
     }

@@ -7,7 +7,7 @@ uyumludur:
 * Uno READY olana kadar bekler.
 * Heartbeat'i 5 Hz gonderir.
 * SURFACE_TEST_START ile D6 servosunun iki yonunu sirayla dener:
-  1100 us -> 1500 us -> 1900 us -> 1500 us.
+  1200 us -> 1500 us -> 1800 us -> 1500 us.
 * Ctrl+C, sure dolumu veya hata halinde servoyu ve tum cikislari durdurur.
 
 actuator_driver veya Arduino Serial Monitor ayni anda calistirilmamalidir.
@@ -116,7 +116,7 @@ def run_test(port, baud, ready_timeout_s, duration_s):
         time.sleep(0.05)
         send_command(uno, 'SURFACE_TEST_START')
         print(
-            'Arduino D6 servosunda 1100 ve 1900 us iki yon testi '
+            'Arduino D6 servosunda 1200 ve 1800 us iki yon testi '
             '(aralarda 1500 us notr) baslatildi. '
             'Durdurmak icin Ctrl+C kullan.'
         )

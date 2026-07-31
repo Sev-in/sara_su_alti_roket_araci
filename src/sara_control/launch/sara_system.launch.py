@@ -128,17 +128,17 @@ def generate_launch_description():
         'surface_servo_test_mode', default_value='false',
         description=(
             'SADECE TEZGAH TESTI: Uno D6 siringa servosunda heartbeat boyunca '
-            '1900 us disari itme / 1500 us notr desenini tekrarlar; '
+            '1800 us disari itme / 1500 us notr desenini tekrarlar; '
             'motor ve '
             'atesleme actuator_driver '
             'tarafinda zorla guvenli tutulur'
         )
     )
     surface_servo_pulse_arg = DeclareLaunchArgument(
-        'surface_servo_test_pulse_us', default_value='1900',
+        'surface_servo_test_pulse_us', default_value='1800',
         description=(
-            'Yalniz test modunda D6 darbesi: 1100=iceri cek, '
-            '1900=disari it; normal gorev daima 1900 kullanir'
+            'Yalniz test modunda D6 darbesi: 1200=iceri cek, '
+            '1800=disari it; normal gorev daima 1800 kullanir'
         )
     )
     start_mavros_arg = DeclareLaunchArgument(
