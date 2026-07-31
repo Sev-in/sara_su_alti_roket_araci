@@ -27,4 +27,9 @@ imu_actuator_bench:
     imu_timeout_s: 0.5
     water_timeout_s: 1.0
     water_debounce_s: 0.3
+    # CH3 burun ayirma: burun kuru + kuyruk islak + referansa gore
+    # en az +30 derece burun-yukari pitch birlikte gerekli.
+    nose_open_min_pitch_deg: 30.0
+    # Montajda burun-yukari relative_pitch negatif okunursa -1.0 yapilir.
+    nose_open_pitch_sign: 1.0
     publish_rate_hz: 20.0

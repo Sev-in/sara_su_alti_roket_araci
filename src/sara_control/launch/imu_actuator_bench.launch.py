@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Pixhawk hareketi -> dogrudan servo ve sinirli motor donanim testi.
 
-Bu launch mission_start ve guidance dugumlerini baslatmaz. Burun kapagi
-su sensoru desenini izler. Siringa, enable_surface_servo aciksa surekli
+Bu launch mission_start ve guidance dugumlerini baslatmaz. Burun kapagi;
+burun kuru, kuyruk islak ve referansa gore pitch en az +30 dereceyse
+acilir. Siringa, enable_surface_servo aciksa surekli
 1800 us disari itme ve 1500 us notr desenini tekrarlar.
 Manuel 3 V olcum testi ayrica enable_ignition_manual_test ile acikca
 etkinlestirilebilir;
@@ -155,7 +156,8 @@ def generate_launch_description():
             output='screen',
             parameters=[
                 os.path.join(config_dir, 'safety_params.yaml'),
-                # Bench testinde CH3 su sensoru desenini anlik takip eder.
+                # Bench testinde CH3 su sensoru + pitch kosullarini
+                # anlik takip eder.
                 {'nose_cap_latching': False},
             ],
         ),

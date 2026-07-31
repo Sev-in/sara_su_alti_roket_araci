@@ -2,35 +2,10 @@
 """SARA havuz gorev kabiliyeti videosu - guvenli baslatma launch'i."""
 
 from launch import LaunchDescription
-from launch.actions import (
-    DeclareLaunchArgument,
-    IncludeLaunchDescription,
-    LogInfo,
-    OpaqueFunction,
-)
-from launch.conditions import IfCondition
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.substitutions import FindPackageShare
-
-
-def _validate_ignition_confirmation(context):
-    enabled = (
-        LaunchConfiguration('enable_ignition_demo')
-        .perform(context).lower() == 'true'
-    )
-    confirmed = (
-        LaunchConfiguration('confirm_measurement_only')
-        .perform(context).lower() == 'true'
-    )
-    if enabled and not confirmed:
-        raise RuntimeError(
-            'Kapak/3 V gosterimi engellendi: gercek roket ve atesleyici '
-            'bagli olmadigini onaylamak icin '
-            'confirm_measurement_only:=true verilmelidir.'
-        )
-    return []
-
 
 def generate_launch_description():
     mode = LaunchConfiguration('mode')
@@ -40,7 +15,6 @@ def generate_launch_description():
     log_directory = LaunchConfiguration('log_directory')
     auto_start = LaunchConfiguration('auto_start')
     motor_inhibit = LaunchConfiguration('motor_inhibit_duration_s')
-    enable_ignition_demo = LaunchConfiguration('enable_ignition_demo')
 
     sara_system = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
@@ -53,7 +27,6 @@ def generate_launch_description():
         launch_arguments={
             'mode': mode,
             'guidance_mode': 'video_demo',
-            'video_demo_ignition_enabled': enable_ignition_demo,
             'start_mavros': start_mavros,
             'fcu_url': fcu_url,
             'enable_telemetry': enable_telemetry,
@@ -104,28 +77,6 @@ def generate_launch_description():
             default_value='3.0',
             description=(
                 'Yalniz video testi icin kisa baslangic beklemesi'
-            ),
-        ),
-        DeclareLaunchArgument(
-            'enable_ignition_demo',
-            default_value='false',
-            description=(
-                'Yuzeyde burun kapagi + 3 V olcum gosterimini etkinlestir'
-            ),
-        ),
-        DeclareLaunchArgument(
-            'confirm_measurement_only',
-            default_value='false',
-            description=(
-                'Gercek roket/atesleyici bagli olmadigini acikca onayla'
-            ),
-        ),
-        OpaqueFunction(function=_validate_ignition_confirmation),
-        LogInfo(
-            condition=IfCondition(enable_ignition_demo),
-            msg=(
-                'VIDEO_DEMO kapak/3 V gosterimi ETKIN. '
-                'Yalniz multimetre veya LED yuku kullanilmalidir.'
             ),
         ),
         sara_system,

@@ -26,17 +26,15 @@ guidance_node:
     pitch_tracking_tolerance_deg: 10.0
     maneuver_step_timeout_s: 35.0
     surface_cap_closed_hold_s: 5.0
-    nose_cap_open_hold_s: 3.0
-    dive_timeout_s: 35.0
-    surface_timeout_s: 35.0
-    ignition_timeout_s: 10.0
-    max_demo_duration_s: 180.0
+    dive_timeout_s: 60.0
+    # Siringanin gozlenen yaklasik 37 sn tam bosaltma suresine; dalga,
+    # basinc kararliligi ve yuzey dogrulama payi eklenmistir.
+    surface_timeout_s: 90.0
+    # Dalis (60), manevralar (68), yuzeye cikis (90) ve yuzey kaniti
+    # asamalarinin kendi zaman asimlarini birbirinden bagimsiz kullanabilmesi.
+    max_demo_duration_s: 300.0
 
     nav_status_timeout_s: 2.0
     motion_permission_timeout_s: 1.0
-    actuator_status_timeout_s: 1.5
     startup_grace_period_s: 8.0
     control_rate_hz: 10.0
-
-    # Launch tarafindan iki asamali onayla ezilir. Varsayilan kapali.
-    enable_ignition_demo: false

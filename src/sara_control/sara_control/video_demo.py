@@ -32,8 +32,6 @@ PHASE_REFERANSLAMA = 'VIDEO_DEMO_REFERANSLAMA'
 PHASE_DALIS = 'VIDEO_DEMO_1M_DALIS'
 PHASE_YUZEYE_CIKIS = 'VIDEO_DEMO_YUZEYE_CIKIS_KAPAK_KAPALI'
 PHASE_YUZEY_KANIT = 'VIDEO_DEMO_YUZEYDE_KAPAK_KAPALI_KANIT'
-PHASE_KAPAK_AC = 'VIDEO_DEMO_BURUN_KAPAGI_AC'
-PHASE_3V_SINYAL = 'VIDEO_DEMO_3V_SINYAL'
 PHASE_TAMAMLANDI = 'VIDEO_DEMO_TAMAMLANDI'
 PHASE_GUVENLI_SONLANDIRMA = 'VIDEO_DEMO_GUVENLI_SONLANDIRMA'
 
@@ -61,17 +59,13 @@ class VideoDemoGuidanceNode(Node):
         self.declare_parameter('pitch_tracking_tolerance_deg', 10.0)
         self.declare_parameter('maneuver_step_timeout_s', 35.0)
         self.declare_parameter('surface_cap_closed_hold_s', 5.0)
-        self.declare_parameter('nose_cap_open_hold_s', 3.0)
         self.declare_parameter('dive_timeout_s', 35.0)
         self.declare_parameter('surface_timeout_s', 35.0)
-        self.declare_parameter('ignition_timeout_s', 10.0)
         self.declare_parameter('max_demo_duration_s', 180.0)
         self.declare_parameter('nav_status_timeout_s', 2.0)
         self.declare_parameter('motion_permission_timeout_s', 1.0)
-        self.declare_parameter('actuator_status_timeout_s', 1.5)
         self.declare_parameter('startup_grace_period_s', 8.0)
         self.declare_parameter('control_rate_hz', 10.0)
-        self.declare_parameter('enable_ignition_demo', False)
 
         self.minimum_depth = float(
             self.get_parameter('minimum_depth_m').value)
@@ -102,26 +96,18 @@ class VideoDemoGuidanceNode(Node):
             self.get_parameter('maneuver_step_timeout_s').value)
         self.surface_cap_closed_hold = float(
             self.get_parameter('surface_cap_closed_hold_s').value)
-        self.nose_cap_open_hold = float(
-            self.get_parameter('nose_cap_open_hold_s').value)
         self.dive_timeout = float(
             self.get_parameter('dive_timeout_s').value)
         self.surface_timeout = float(
             self.get_parameter('surface_timeout_s').value)
-        self.ignition_timeout = float(
-            self.get_parameter('ignition_timeout_s').value)
         self.max_demo_duration = float(
             self.get_parameter('max_demo_duration_s').value)
         self.nav_status_timeout = float(
             self.get_parameter('nav_status_timeout_s').value)
         self.motion_permission_timeout = float(
             self.get_parameter('motion_permission_timeout_s').value)
-        self.actuator_status_timeout = float(
-            self.get_parameter('actuator_status_timeout_s').value)
         self.startup_grace_period = float(
             self.get_parameter('startup_grace_period_s').value)
-        self.enable_ignition_demo = bool(
-            self.get_parameter('enable_ignition_demo').value)
 
         if self.minimum_depth < 1.0:
             raise ValueError(
@@ -158,11 +144,6 @@ class VideoDemoGuidanceNode(Node):
         self._last_motion_permission_time = None
         self._emergency_stop = False
         self._leak_detected = False
-        self._last_actuator_status_time = None
-        self._actuator_status_level = DiagnosticStatus.STALE
-        self._ignition_confirmed = False
-        self._ignition_was_confirmed = False
-
         self._target_depth = 0.0
         self._target_heading = 0.0
         self._target_pitch = 0.0
@@ -179,9 +160,6 @@ class VideoDemoGuidanceNode(Node):
         self.create_subscription(
             DiagnosticStatus, '/sara/navigation/status',
             self._on_nav_status, 10)
-        self.create_subscription(
-            DiagnosticStatus, '/sara/actuators/status',
-            self._on_actuator_status, 10)
         self.create_subscription(
             Bool, '/sara/mission_start/motion_permission',
             self._on_motion_permission, 10)
@@ -214,8 +192,8 @@ class VideoDemoGuidanceNode(Node):
         self.get_logger().info(
             'VIDEO_DEMO gudumu baslatildi: '
             f'su alti manevrasi={self.sequence_duration:.1f} sn, '
-            f'hedef derinlik={self.target_depth:.2f} m, '
-            f'3 V/kapak gosterimi={self.enable_ignition_demo}.')
+            f'hedef derinlik={self.target_depth:.2f} m. '
+            'Burun ayirma/3 V gosterimi karadaki bench testine ayrildi.')
 
     def _on_odom(self, msg):
         self._depth = float(msg.pose.pose.position.z)
@@ -235,15 +213,6 @@ class VideoDemoGuidanceNode(Node):
         self._pixhawk_connected = (
             values.get('pixhawk_connected', 'False') == 'True')
         self._depth_valid = values.get('depth_valid', 'False') == 'True'
-
-    def _on_actuator_status(self, msg):
-        self._last_actuator_status_time = self.get_clock().now()
-        self._actuator_status_level = msg.level
-        values = {kv.key: kv.value for kv in msg.values}
-        self._ignition_confirmed = (
-            values.get('ignition_active', 'False') == 'True')
-        if self._ignition_confirmed:
-            self._ignition_was_confirmed = True
 
     def _on_motion_permission(self, msg):
         self._motion_permission = bool(msg.data)
@@ -273,14 +242,6 @@ class VideoDemoGuidanceNode(Node):
         return (
             self._age_s(self._last_motion_permission_time)
             <= self.motion_permission_timeout
-        )
-
-    def _ignition_confirmation_fresh(self):
-        return (
-            self._age_s(self._last_actuator_status_time)
-            <= self.actuator_status_timeout
-            and self._actuator_status_level != DiagnosticStatus.ERROR
-            and self._ignition_confirmed
         )
 
     def _elapsed_since(self, stamp):
@@ -497,33 +458,8 @@ class VideoDemoGuidanceNode(Node):
                 self._safe_terminate('yuzey_kaniti_sirasinda_yuzey_kaybi')
             elif self._phase_elapsed() >= self.surface_cap_closed_hold:
                 self._surface_cap_closed_verified = True
-                if self.enable_ignition_demo:
-                    self._goto_phase(PHASE_KAPAK_AC)
-                else:
-                    self._goto_phase(PHASE_TAMAMLANDI)
-            return
-
-        if self._phase == PHASE_KAPAK_AC:
-            self._target_depth = 0.0
-            self._target_heading = self._reference_heading
-            self._nose_cap_open_request = True
-            if not self._surface_detected:
-                self._safe_terminate('kapak_acma_sirasinda_yuzey_kaybi')
-            elif self._phase_elapsed() >= self.nose_cap_open_hold:
-                self._goto_phase(PHASE_3V_SINYAL)
-            return
-
-        if self._phase == PHASE_3V_SINYAL:
-            self._target_depth = 0.0
-            self._target_heading = self._reference_heading
-            self._nose_cap_open_request = True
-            self._launch_request = True
-            if not self._surface_detected:
-                self._safe_terminate('3v_sinyali_sirasinda_yuzey_kaybi')
-            elif self._ignition_confirmation_fresh():
                 self._goto_phase(PHASE_TAMAMLANDI)
-            elif self._phase_elapsed() > self.ignition_timeout:
-                self._safe_terminate('3v_olcum_cikisi_dogrulanamadi')
+            return
 
     def _publish(self):
         now = self.get_clock().now()
@@ -601,12 +537,8 @@ class VideoDemoGuidanceNode(Node):
             KeyValue(
                 key='surface_cap_closed_verified',
                 value=str(self._surface_cap_closed_verified)),
-            KeyValue(
-                key='ignition_demo_enabled',
-                value=str(self.enable_ignition_demo)),
-            KeyValue(
-                key='ignition_confirmed',
-                value=str(self._ignition_was_confirmed)),
+            KeyValue(key='nose_separation_enabled', value='False'),
+            KeyValue(key='ignition_demo_enabled', value='False'),
             KeyValue(
                 key='motion_permission',
                 value=str(self._motion_permission)),

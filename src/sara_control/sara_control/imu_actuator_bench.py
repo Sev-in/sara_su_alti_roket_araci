@@ -5,7 +5,8 @@ Servo davranisi, sahada iyi calistigi bildirilen standalone kodla aynidir:
 
 * CH1/pitch: referansa gore pitch farki, +-35 derece
 * CH2/yaw: roll ve yaw farkindan mutlak degeri buyuk olan, +-35 derece
-* CH3/burun: burun kuru ve kuyruk islaksa acik, aksi halde kapali
+* CH3/burun: burun kuru, kuyruk islak ve arac referansa gore en az
+  +30 derece pitch acisindaysa acik; aksi halde kapali
 
 Bu dugum donanimi dogrudan surmez. Normalize komutlar yine
 safety -> actuator_driver -> Uno/PCA9685 zincirinden gecer. Burun kapagi,
@@ -61,6 +62,8 @@ class ImuActuatorBench(Node):
         self.declare_parameter('imu_timeout_s', 0.5)
         self.declare_parameter('water_timeout_s', 1.0)
         self.declare_parameter('water_debounce_s', 0.3)
+        self.declare_parameter('nose_open_min_pitch_deg', 30.0)
+        self.declare_parameter('nose_open_pitch_sign', 1.0)
         self.declare_parameter('publish_rate_hz', 20.0)
 
         enable_motor = bool(self.get_parameter('enable_motor').value)
@@ -110,6 +113,15 @@ class ImuActuatorBench(Node):
             0.1, float(self.get_parameter('water_timeout_s').value))
         water_debounce = max(
             0.0, float(self.get_parameter('water_debounce_s').value))
+        self._nose_open_min_pitch = max(
+            0.0,
+            float(self.get_parameter('nose_open_min_pitch_deg').value),
+        )
+        self._nose_open_pitch_sign = (
+            1.0
+            if float(self.get_parameter('nose_open_pitch_sign').value) >= 0.0
+            else -1.0
+        )
 
         self._navigation_ready = False
         self._reference = None
@@ -117,6 +129,7 @@ class ImuActuatorBench(Node):
         self._last_odom_time = None
         self._pitch_offset = 0.0
         self._yaw_offset = 0.0
+        self._relative_pitch_deg = None
         self._water_1 = None
         self._water_2 = None
         self._last_water_1_time = None
@@ -265,6 +278,7 @@ class ImuActuatorBench(Node):
         _relative_roll, relative_pitch, _relative_yaw = (
             quaternion_to_euler(*relative))
         delta_pitch = math.degrees(relative_pitch)
+        self._relative_pitch_deg = delta_pitch
 
         self._pitch_offset = clamp(
             self._sign_pitch * self._pitch_gain * delta_pitch,
@@ -304,17 +318,27 @@ class ImuActuatorBench(Node):
         ).nanoseconds * 1e-9
         return age <= self._water_timeout
 
-    def _nose_open_from_water(self):
+    def _nose_open_from_conditions(self):
         sensors_fresh = (
             self._water_stamp_fresh(self._last_water_1_time)
             and self._water_stamp_fresh(self._last_water_2_time)
         )
-        # Standalone kodla ayni karar:
-        # burun kuru (False) + kuyruk islak (True) -> CH3=90 derece.
+        pitch_valid = (
+            self._imu_fresh()
+            and self._relative_pitch_deg is not None
+        )
+        signed_pitch = (
+            self._nose_open_pitch_sign * self._relative_pitch_deg
+            if pitch_valid
+            else float('-inf')
+        )
+        # Uc kosul birlikte saglanmadan burun ayirma istegi verilmez:
+        # burun kuru + kuyruk islak + referansa gore burun yukari >= 30 deg.
         return bool(
             sensors_fresh
             and self._water_1 is False
             and self._water_2 is True
+            and signed_pitch >= self._nose_open_min_pitch
         )
 
     def _publish_commands(self):
@@ -335,7 +359,7 @@ class ImuActuatorBench(Node):
         nose_open = (
             False
             if self._power_cutoff_requested
-            else self._nose_open_from_water()
+            else self._nose_open_from_conditions()
         )
         cap = Bool()
         cap.data = nose_open
@@ -409,6 +433,25 @@ class ImuActuatorBench(Node):
             KeyValue(
                 key='water_2_tail',
                 value=str(self._water_2)),
+            KeyValue(
+                key='relative_pitch_deg',
+                value=(
+                    '-'
+                    if self._relative_pitch_deg is None
+                    else f'{self._relative_pitch_deg:.1f}'
+                )),
+            KeyValue(
+                key='nose_open_min_pitch_deg',
+                value=f'{self._nose_open_min_pitch:.1f}'),
+            KeyValue(
+                key='nose_pitch_condition',
+                value=str(bool(
+                    self._imu_fresh()
+                    and self._relative_pitch_deg is not None
+                    and self._nose_open_pitch_sign
+                    * self._relative_pitch_deg
+                    >= self._nose_open_min_pitch
+                ))),
             KeyValue(
                 key='ch3_nose_open',
                 value=str(nose_open)),
