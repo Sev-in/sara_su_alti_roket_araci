@@ -3,6 +3,23 @@
 import math
 
 
+def should_latch_power_cutoff(
+    *,
+    video_demo_mode: bool,
+    task_complete: bool = False,
+    emergency_stop: bool = False,
+    power_cutoff_on_emergency_stop: bool = True,
+) -> bool:
+    """D5 kesmenin yalniz gercek gorevlerde kilitlenmesini sagla."""
+
+    if video_demo_mode:
+        return False
+    return bool(
+        task_complete
+        or (emergency_stop and power_cutoff_on_emergency_stop)
+    )
+
+
 def video_demo_surface_gate(
     *,
     demo_mode: bool,

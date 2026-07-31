@@ -17,8 +17,9 @@ safety_node:
     water_debounce_s: 0.3
     # Gercek gorevde acilan burun kapagi tekrar kapanmasin.
     nose_cap_latching: true
-    # Acil durdurma Uno D5 HIGH ile ana guc kesmeyi kilitler.
-    # Yeniden acma fiziksel reset/guc dongusu gerektirir.
+    # Normal Gorev 1/2 acil durdurmasi Uno D5 HIGH ile ana guc kesmeyi
+    # kilitler. VIDEO_DEMO'da D5 kesilmez; tum eyleyiciler sifirlanir.
+    # D5 kilidi yeniden acmak icin fiziksel reset/guc dongusu gerektirir.
     power_cutoff_on_emergency_stop: true
     # Normal Gorev 1/2 icin daima false. video_demo.launch.py tarafindan
     # yalniz havuz gosteriminde ve iki asamali olcum onayiyla ezilir.

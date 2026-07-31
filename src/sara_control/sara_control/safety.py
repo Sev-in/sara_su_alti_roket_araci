@@ -45,11 +45,10 @@ Cikti (NIHAI komutlar - Pixhawk/MAVROS koprusu SADECE bunlari dinlemeli):
     /sara/control/launch_command      (std_msgs/Bool)         -- burun ayirma sistemine (atesleme) - SISTEMDE BUNU True YAPABILEN TEK YER
     /sara/safety/approved             (std_msgs/Bool)         -- semadaki "Guvenli Onay?" karari (Evet=True/Hayir=False)
     /sara/safety/fail_safe_active     (std_msgs/Bool)         -- "Hayir" dalinin acik gostergesi (Fail-Safe/Komut Bloke)
-    /sara/safety/main_power_cutoff_command (std_msgs/Bool)    -- Gorev/faz TAMAMLANDIGINDA,
-                                                                   GUVENLI_SONLANDIRMA'da veya
-                                                                   emergency_stop=True oldugunda kilitli True olur.
-                                                                   actuator_driver bunu Uno POWER_CUTOFF
-                                                                   komutuna ve D5 HIGH cikisina cevirir.
+    /sara/safety/main_power_cutoff_command (std_msgs/Bool)    -- Normal Gorev 1/2 tamamlandiginda
+                                                                   veya emergency_stop=True oldugunda
+                                                                   kilitli True olur. VIDEO_DEMO'da
+                                                                   D5 kesilmez; eyleyiciler sifirlanir.
     /sara/safety/status               (diagnostic_msgs/DiagnosticStatus)  -- blokaj nedeni dahil
 """
 
@@ -70,7 +69,10 @@ from sara_control.mission_geometry import (
     is_at_or_beyond_distance,
 )
 from sara_control.sensor_processing import DebouncedBoolean
-from sara_control.video_demo_safety import video_demo_surface_gate
+from sara_control.video_demo_safety import (
+    should_latch_power_cutoff,
+    video_demo_surface_gate,
+)
 
 
 class SafetyNode(Node):
@@ -173,8 +175,8 @@ class SafetyNode(Node):
         self._nose_cap_command_latched = False
         self._was_launch_command = False
         self._task_complete = False   # YENI - guidance_node'dan gelir
-        # Bir terminal faz goruldugunde ana guc kesme istegi, node yeniden
-        # baslatilana kadar geri alinamaz. Uno tarafinda da ayni kilit vardir.
+        # Normal Gorev 1/2 terminal fazinda ana guc kesme istegi, node yeniden
+        # baslatilana kadar geri alinamaz. VIDEO_DEMO terminalinde D5 kesilmez.
         self._main_power_cutoff_latched = False
 
         self.create_subscription(Float64, '/sara/control/thrust_request', self._on_thrust_req, 10)
@@ -225,9 +227,9 @@ class SafetyNode(Node):
         # topic'i dinleyebilir).
         self._approved_pub = self.create_publisher(Bool, '/sara/safety/approved', 10)          # Evet=True / Hayir=False
         self._failsafe_pub = self.create_publisher(Bool, '/sara/safety/fail_safe_active', 10)   # Hayir dalinin acik gostergesi
-        # Gorev/faz TAMAMLANDIGINDA veya GUVENLI_SONLANDIRMA'ya
-        # girildiginde kilitli True olur. actuator_driver bu istegi Uno
-        # POWER_CUTOFF komutuna ve D5 HIGH cikisina cevirir.
+        # Normal Gorev 1/2 tamamlandiginda kilitli True olur. actuator_driver
+        # bu istegi Uno POWER_CUTOFF komutuna ve D5 HIGH cikisina cevirir.
+        # VIDEO_DEMO'da False kalir; eyleyiciler yazilimsal olarak sifirlanir.
         self._power_cutoff_pub = self.create_publisher(Bool, '/sara/safety/main_power_cutoff_command', 10)
         self._status_pub = self.create_publisher(DiagnosticStatus, '/sara/safety/status', 10)
 
@@ -258,9 +260,17 @@ class SafetyNode(Node):
         self._launch_request = msg.data
 
     def _on_task_complete(self, msg: Bool):
-        self._task_complete = msg.data
-        if msg.data:
+        was_complete = self._task_complete
+        self._task_complete = bool(msg.data)
+        if should_latch_power_cutoff(
+            video_demo_mode=self.video_demo_mode,
+            task_complete=self._task_complete,
+        ):
             self._main_power_cutoff_latched = True
+        elif self._task_complete and not was_complete:
+            self.get_logger().warning(
+                'VIDEO_DEMO tamamlandi: D5 ana guc kesme uygulanmadi; '
+                'tum hareket/itki komutlari guvenli olarak sifirlaniyor.')
 
     def _on_motion_permission(self, msg: Bool):
         self._last_motion_permission_time = self.get_clock().now()
@@ -320,13 +330,26 @@ class SafetyNode(Node):
         emergency_active = bool(msg.data)
         if (
             emergency_active
-            and self.power_cutoff_on_emergency_stop
+            and should_latch_power_cutoff(
+                video_demo_mode=self.video_demo_mode,
+                emergency_stop=True,
+                power_cutoff_on_emergency_stop=(
+                    self.power_cutoff_on_emergency_stop),
+            )
             and not self._main_power_cutoff_latched
         ):
             self.get_logger().error(
                 'Acil durdurma: hareket komutlari sifirlandi ve '
                 'ana guc kesme kilitlendi.')
             self._main_power_cutoff_latched = True
+        elif (
+            emergency_active
+            and not self._emergency_stop
+            and self.video_demo_mode
+        ):
+            self.get_logger().warning(
+                'VIDEO_DEMO acil durdurma: D5 ana guc kesme uygulanmadi; '
+                'tum eyleyici komutlari sifirlaniyor.')
         self._emergency_stop = emergency_active
 
     def _on_leak(self, msg: Bool):
@@ -442,6 +465,12 @@ class SafetyNode(Node):
             thrust_command = 0.0
             block_reasons.append('operator_kontrollu_motor_durdurma')
 
+        # VIDEO_DEMO terminal fazinda Jetson/olcum sistemi enerjili kalir,
+        # fakat tum hareket eyleyicileri kosulsuz guvenli duruma getirilir.
+        # Normal Gorev 1/2'de task_complete ayrica D5 kesmeyi kilitler.
+        if self._task_complete:
+            thrust_command = 0.0
+
         if core_safe and self._request_fresh(self._last_fin_req_time):
             fin_command = self._fin_request
         else:
@@ -521,17 +550,19 @@ class SafetyNode(Node):
                     self._pitch >= self.launch_min_pitch,
             }
         launch_command = all(launch_conditions.values())
-        if self._controlled_motor_stop:
+        if self._controlled_motor_stop or self._task_complete:
             launch_command = False
         if not launch_command and self._launch_request:
             failed = [k for k, v in launch_conditions.items() if not v]
             block_reasons.append('firlatma_bloklandi:' + ','.join(failed))
 
-        # YENI (sartname 6.2.1, savunma-derinligi): gorev tamamlandiginda
-        # (veya fail-safe/GUVENLI_SONLANDIRMA'ya girildiginde) guidance_node
-        # zaten forward_motion=False gonderir, ancak burada da ACIKCA/
-        # KOSULSUZ olarak tum hareket komutlarini sifirliyoruz - guidance
-        # katmanindaki olasi bir hataya karsi ikinci, bagimsiz bir guvence.
+        # Gorev tamamlandiginda tum hareket komutlari sifirlanir. Normal
+        # Gorev 1/2'de D5 de kilitlenir; VIDEO_DEMO'da Jetson ve olcum
+        # sistemi enerjili kalir, yalnizca eyleyiciler durdurulur.
+        if self._task_complete:
+            thrust_command = 0.0
+            fin_command = Vector3(x=0.0, y=0.0, z=0.0)
+            buoyancy_command = 0.0
         if self._main_power_cutoff_latched:
             thrust_command = 0.0
             fin_command = Vector3(x=0.0, y=0.0, z=0.0)

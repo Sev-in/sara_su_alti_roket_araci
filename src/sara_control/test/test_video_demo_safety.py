@@ -1,7 +1,10 @@
 import math
 import unittest
 
-from sara_control.video_demo_safety import video_demo_surface_gate
+from sara_control.video_demo_safety import (
+    should_latch_power_cutoff,
+    video_demo_surface_gate,
+)
 
 
 class VideoDemoSafetyTests(unittest.TestCase):
@@ -55,6 +58,28 @@ class VideoDemoSafetyTests(unittest.TestCase):
         values = self._valid_inputs()
         values['depth_m'] = math.nan
         self.assertFalse(video_demo_surface_gate(**values))
+
+    def test_video_demo_never_latches_main_power_cutoff(self):
+        self.assertFalse(should_latch_power_cutoff(
+            video_demo_mode=True,
+            task_complete=True,
+        ))
+        self.assertFalse(should_latch_power_cutoff(
+            video_demo_mode=True,
+            emergency_stop=True,
+            power_cutoff_on_emergency_stop=True,
+        ))
+
+    def test_real_mission_keeps_power_cutoff_policy(self):
+        self.assertTrue(should_latch_power_cutoff(
+            video_demo_mode=False,
+            task_complete=True,
+        ))
+        self.assertTrue(should_latch_power_cutoff(
+            video_demo_mode=False,
+            emergency_stop=True,
+            power_cutoff_on_emergency_stop=True,
+        ))
 
 
 if __name__ == '__main__':
