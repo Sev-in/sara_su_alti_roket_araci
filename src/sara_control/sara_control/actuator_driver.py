@@ -61,7 +61,7 @@ class ActuatorDriverNode(Node):
         self.declare_parameter('nose_open_deg', 90.0)
         self.declare_parameter('buoyancy_surface_threshold', -0.05)
         self.declare_parameter('surface_servo_test_mode', False)
-        self.declare_parameter('surface_servo_test_pulse_us', 1800)
+        self.declare_parameter('surface_servo_test_pulse_us', 1900)
         self.declare_parameter('ignition_manual_test_mode', False)
 
         self.declare_parameter('surface_reference_pa', 101325.0)
@@ -96,11 +96,11 @@ class ActuatorDriverNode(Node):
             self.get_parameter('surface_servo_test_mode').value)
         self.surface_servo_test_pulse_us = int(
             self.get_parameter('surface_servo_test_pulse_us').value)
-        if self.surface_servo_test_pulse_us not in (1200, 1800):
+        if self.surface_servo_test_pulse_us not in (1100, 1900):
             self.get_logger().warning(
-                'surface_servo_test_pulse_us yalnizca 1200 veya 1800 '
-                'olabilir; guvenli varsayilan 1800 kullaniliyor.')
-            self.surface_servo_test_pulse_us = 1800
+                'surface_servo_test_pulse_us yalnizca 1100 veya 1900 '
+                'olabilir; guvenli varsayilan 1900 kullaniliyor.')
+            self.surface_servo_test_pulse_us = 1900
         self.ignition_manual_test_mode = bool(
             self.get_parameter('ignition_manual_test_mode').value)
 
@@ -206,11 +206,11 @@ class ActuatorDriverNode(Node):
             'Yalnizca safety_node *_command ciktilari uygulanir.')
         if self.surface_servo_test_mode:
             direction = (
-                'iceri cekme' if self.surface_servo_test_pulse_us == 1200
+                'iceri cekme' if self.surface_servo_test_pulse_us == 1100
                 else 'disari itme'
             )
             self.get_logger().warning(
-                'D6 SIRINGA TEST MODU ETKIN: Uno D6 servosu 500 ms '
+                'D6 SIRINGA TEST MODU ETKIN: Uno D6 servosu 1000 ms '
                 f'{self.surface_servo_test_pulse_us} us {direction} / '
                 '200 ms 1500 us notr desenini tekrarlayacak; '
                 'motor ve otomatik atesleme actuator_driver tarafinda zorla '
@@ -448,7 +448,7 @@ class ActuatorDriverNode(Node):
                 command = 'SURFACE_START'
                 if (
                     self.surface_servo_test_mode
-                    and self.surface_servo_test_pulse_us == 1200
+                    and self.surface_servo_test_pulse_us == 1100
                 ):
                     command = 'SURFACE_RETRACT_START'
                 self._write(command)
