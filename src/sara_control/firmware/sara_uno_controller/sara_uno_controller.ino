@@ -180,13 +180,11 @@ void yuzeyServosunuDurdur()
   yuzeyServoCalisiyor = false;
 }
 
-void yuzeyServosunuBaslat(bool testModu)
+void yuzeyServosunuBaslat(uint16_t baslangicUs, bool ikiYonTesti)
 {
-  yuzeyServoTestModu = testModu;
+  yuzeyServoTestModu = ikiYonTesti;
   yuzeyServoTestDisariYonu = false;
-  yuzeyServoAktifUs = testModu
-      ? YUZEY_SERVO_SUYU_ICERI_CEK_US
-      : YUZEY_SERVO_SUYU_DISARI_IT_US;
+  yuzeyServoAktifUs = baslangicUs;
   yuzeyServoDarbeAktif = true;
   yuzeyServoHareketFazi = true;
   yuzeyServoFazBaslangicMs = millis();
@@ -489,8 +487,19 @@ void komutuIsle(char *komut)
       Serial.println(F("ERR,HEARTBEAT_REQUIRED"));
     } else {
       // Gercek gorev: yalnizca 1800 us ile suyu disari it.
-      yuzeyServosunuBaslat(false);
+      yuzeyServosunuBaslat(YUZEY_SERVO_SUYU_DISARI_IT_US, false);
       Serial.println(F("OK,SURFACE_PULSE_RUNNING"));
+    }
+    return;
+  }
+  if (strcmp(komut, "SURFACE_RETRACT_START") == 0) {
+    if (!heartbeatGuncel()) {
+      yuzeyServosunuDurdur();
+      Serial.println(F("ERR,HEARTBEAT_REQUIRED"));
+    } else {
+      // Yalnizca test: 1200 us ile suyu iceri cek.
+      yuzeyServosunuBaslat(YUZEY_SERVO_SUYU_ICERI_CEK_US, false);
+      Serial.println(F("OK,SURFACE_RETRACT_RUNNING"));
     }
     return;
   }
@@ -501,7 +510,7 @@ void komutuIsle(char *komut)
       Serial.println(F("ERR,HEARTBEAT_REQUIRED"));
     } else {
       // Yalnizca test: 1200 ve 1800 us yonlerini sirayla dene.
-      yuzeyServosunuBaslat(true);
+      yuzeyServosunuBaslat(YUZEY_SERVO_SUYU_ICERI_CEK_US, true);
       Serial.println(F("OK,SURFACE_TEST_RUNNING"));
     }
     return;

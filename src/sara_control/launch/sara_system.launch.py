@@ -128,10 +128,17 @@ def generate_launch_description():
         'surface_servo_test_mode', default_value='false',
         description=(
             'SADECE TEZGAH TESTI: Uno D6 siringa servosunda heartbeat boyunca '
-            '1200 ve 1800 us yonlerini, aralarda 1500 us notr ile dener; '
+            '1800 us disari itme / 1500 us notr desenini tekrarlar; '
             'motor ve '
             'atesleme actuator_driver '
             'tarafinda zorla guvenli tutulur'
+        )
+    )
+    surface_servo_pulse_arg = DeclareLaunchArgument(
+        'surface_servo_test_pulse_us', default_value='1800',
+        description=(
+            'Yalniz test modunda D6 darbesi: 1200=iceri cek, '
+            '1800=disari it; normal gorev daima 1800 kullanir'
         )
     )
     start_mavros_arg = DeclareLaunchArgument(
@@ -161,6 +168,8 @@ def generate_launch_description():
     auto_start = LaunchConfiguration('auto_start')
     surface_servo_test_mode = LaunchConfiguration(
         'surface_servo_test_mode')
+    surface_servo_test_pulse_us = LaunchConfiguration(
+        'surface_servo_test_pulse_us')
     start_mavros = LaunchConfiguration('start_mavros')
     fcu_url = LaunchConfiguration('fcu_url')
 
@@ -210,7 +219,9 @@ def generate_launch_description():
             os.path.join(config_dir, 'actuator_driver_params.yaml'),
             {
                 'surface_servo_test_mode': ParameterValue(
-                    surface_servo_test_mode, value_type=bool)
+                    surface_servo_test_mode, value_type=bool),
+                'surface_servo_test_pulse_us': ParameterValue(
+                    surface_servo_test_pulse_us, value_type=int),
             },
         ],
         condition=IfCondition(is_hardware_mode),
@@ -345,6 +356,7 @@ def generate_launch_description():
         motor_inhibit_arg,
         auto_start_arg,
         surface_servo_test_arg,
+        surface_servo_pulse_arg,
         start_mavros_arg,
         fcu_url_arg,
 

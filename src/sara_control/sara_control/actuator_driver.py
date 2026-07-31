@@ -61,6 +61,7 @@ class ActuatorDriverNode(Node):
         self.declare_parameter('nose_open_deg', 90.0)
         self.declare_parameter('buoyancy_surface_threshold', -0.05)
         self.declare_parameter('surface_servo_test_mode', False)
+        self.declare_parameter('surface_servo_test_pulse_us', 1800)
         self.declare_parameter('ignition_manual_test_mode', False)
 
         self.declare_parameter('surface_reference_pa', 101325.0)
@@ -93,6 +94,13 @@ class ActuatorDriverNode(Node):
             self.get_parameter('buoyancy_surface_threshold').value)
         self.surface_servo_test_mode = bool(
             self.get_parameter('surface_servo_test_mode').value)
+        self.surface_servo_test_pulse_us = int(
+            self.get_parameter('surface_servo_test_pulse_us').value)
+        if self.surface_servo_test_pulse_us not in (1200, 1800):
+            self.get_logger().warning(
+                'surface_servo_test_pulse_us yalnizca 1200 veya 1800 '
+                'olabilir; guvenli varsayilan 1800 kullaniliyor.')
+            self.surface_servo_test_pulse_us = 1800
         self.ignition_manual_test_mode = bool(
             self.get_parameter('ignition_manual_test_mode').value)
 
@@ -197,9 +205,14 @@ class ActuatorDriverNode(Node):
             f'actuator_driver baslatildi: Uno={self.port}@{self.baud}. '
             'Yalnizca safety_node *_command ciktilari uygulanir.')
         if self.surface_servo_test_mode:
+            direction = (
+                'iceri cekme' if self.surface_servo_test_pulse_us == 1200
+                else 'disari itme'
+            )
             self.get_logger().warning(
-                'D6 SIRINGA TEST MODU ETKIN: Uno D6 servosu 1200 ve '
-                '1800 us yonlerini, aralarda 1500 us notr ile deneyecek; '
+                'D6 SIRINGA TEST MODU ETKIN: Uno D6 servosu 500 ms '
+                f'{self.surface_servo_test_pulse_us} us {direction} / '
+                '200 ms 1500 us notr desenini tekrarlayacak; '
                 'motor ve otomatik atesleme actuator_driver tarafinda zorla '
                 'guvenli tutulacak.')
         if self.ignition_manual_test_mode:
@@ -432,10 +445,13 @@ class ActuatorDriverNode(Node):
         )
         if surface_requested != self._surface_running:
             if surface_requested:
-                self._write(
-                    'SURFACE_TEST_START'
-                    if self.surface_servo_test_mode
-                    else 'SURFACE_START')
+                command = 'SURFACE_START'
+                if (
+                    self.surface_servo_test_mode
+                    and self.surface_servo_test_pulse_us == 1200
+                ):
+                    command = 'SURFACE_RETRACT_START'
+                self._write(command)
             else:
                 self._write('SURFACE_STOP')
             self._surface_running = surface_requested
@@ -714,7 +730,8 @@ class ActuatorDriverNode(Node):
         elif self.surface_servo_test_mode:
             status.level = DiagnosticStatus.WARN
             status.message = (
-                'D6 siringa 1200/1500/1800 us iki yon testi etkin')
+                'D6 siringa '
+                f'{self.surface_servo_test_pulse_us}/1500 us testi etkin')
         elif self.ignition_manual_test_mode:
             status.level = DiagnosticStatus.WARN
             status.message = 'D2 manuel 3 V olcum testi etkin'
@@ -725,6 +742,9 @@ class ActuatorDriverNode(Node):
             KeyValue(
                 key='surface_servo_test_mode',
                 value=str(self.surface_servo_test_mode)),
+            KeyValue(
+                key='surface_servo_test_pulse_us',
+                value=str(self.surface_servo_test_pulse_us)),
             KeyValue(key='serial_ready', value=str(serial_ok)),
             KeyValue(
                 key='serial_rx_age_s',
