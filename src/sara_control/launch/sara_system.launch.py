@@ -128,7 +128,8 @@ def generate_launch_description():
         'surface_servo_test_mode', default_value='false',
         description=(
             'SADECE TEZGAH TESTI: Uno D6 siringa servosunda heartbeat boyunca '
-            '500 ms 1200 us / 200 ms 1500 us desenini tekrarlar; motor ve '
+            '1200 ve 1800 us yonlerini, aralarda 1500 us notr ile dener; '
+            'motor ve '
             'atesleme actuator_driver '
             'tarafinda zorla guvenli tutulur'
         )

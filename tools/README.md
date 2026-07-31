@@ -6,6 +6,8 @@ Ayni seri porta birden fazla program baglanmamalidir.
 ## Uno yuzey servosu testi
 
 Arduino Uno D6 pinine bagli siringa/yuzey servosunu ROS 2 olmadan test eder:
+Testte 1200 us iceri cekme ve 1800 us disari itme yonleri sirayla uygulanir;
+normal gorev yazilimi yalnizca 1800 us disari itme yonunu kullanir.
 
 ```bash
 python3 tools/uno_surface_servo_test.py --port /dev/ttyUSB0

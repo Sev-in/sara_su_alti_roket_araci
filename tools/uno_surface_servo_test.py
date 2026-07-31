@@ -6,8 +6,8 @@ uyumludur:
 
 * Uno READY olana kadar bekler.
 * Heartbeat'i 5 Hz gonderir.
-* SURFACE_START ile D6 servosunda gercek yuzeye cikis desenini calistirir:
-  500 ms 1200 us, ardindan 200 ms 1500 us.
+* SURFACE_TEST_START ile D6 servosunun iki yonunu sirayla dener:
+  1200 us -> 1500 us -> 1800 us -> 1500 us.
 * Ctrl+C, sure dolumu veya hata halinde servoyu ve tum cikislari durdurur.
 
 actuator_driver veya Arduino Serial Monitor ayni anda calistirilmamalidir.
@@ -114,10 +114,10 @@ def run_test(port, baud, ready_timeout_s, duration_s):
         send_command(uno, 'IGNITION=0')
         send_command(uno, 'SURFACE_STOP')
         time.sleep(0.05)
-        send_command(uno, 'SURFACE_START')
+        send_command(uno, 'SURFACE_TEST_START')
         print(
-            'Arduino D6 servosunda 500 ms 1200 us / 200 ms 1500 us '
-            'yuzeye cikis deseni baslatildi. '
+            'Arduino D6 servosunda 1200 ve 1800 us iki yon testi '
+            '(aralarda 1500 us notr) baslatildi. '
             'Durdurmak icin Ctrl+C kullan.'
         )
 
@@ -139,7 +139,7 @@ def run_test(port, baud, ready_timeout_s, duration_s):
                 line = read_line(uno)
                 if line:
                     print(f'UNO: {line}')
-                    if line == 'OK,SURFACE_PULSE_RUNNING':
+                    if line == 'OK,SURFACE_TEST_RUNNING':
                         confirmed = True
                     if line.startswith('ERR,'):
                         if line in NON_FATAL_ERRORS:
@@ -152,7 +152,7 @@ def run_test(port, baud, ready_timeout_s, duration_s):
 
                 if not confirmed and now - start_time > 2.0:
                     print(
-                        'UYARI: Uno SURFACE_PULSE_RUNNING onayi vermedi.',
+                        'UYARI: Uno SURFACE_TEST_RUNNING onayi vermedi.',
                         file=sys.stderr,
                     )
                     confirmed = True

@@ -27,8 +27,8 @@ actuator_driver:
     # Autopilot yuzeye cikis icin negatif sephiye komutu uretir.
     buoyancy_surface_threshold: -0.05
     # Bench'te enable_surface_servo:=true veya sara_system.launch.py'de
-    # surface_servo_test_mode:=true ile Uno D6 servosu gercek yuzeye cikis
-    # desenini tekrarlar: 500 ms 1200 us, 200 ms 1500 us.
+    # surface_servo_test_mode:=true ile Uno D6 servosu 1200 ve 1800 us
+    # yonlerini, aralarda 1500 us notr olacak sekilde test eder.
     # Normal gorevde kesinlikle false kalmalidir.
     surface_servo_test_mode: false
     # Yalniz bench launch'ta acik onayla true yapilir. Normal gorevde

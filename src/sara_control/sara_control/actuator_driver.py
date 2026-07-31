@@ -198,8 +198,8 @@ class ActuatorDriverNode(Node):
             'Yalnizca safety_node *_command ciktilari uygulanir.')
         if self.surface_servo_test_mode:
             self.get_logger().warning(
-                'D6 SIRINGA TEST MODU ETKIN: Uno D6 servosu 500 ms '
-                '1200 us / 200 ms 1500 us desenini tekrarlayacak; '
+                'D6 SIRINGA TEST MODU ETKIN: Uno D6 servosu 1200 ve '
+                '1800 us yonlerini, aralarda 1500 us notr ile deneyecek; '
                 'motor ve otomatik atesleme actuator_driver tarafinda zorla '
                 'guvenli tutulacak.')
         if self.ignition_manual_test_mode:
@@ -432,7 +432,10 @@ class ActuatorDriverNode(Node):
         )
         if surface_requested != self._surface_running:
             if surface_requested:
-                self._write('SURFACE_START')
+                self._write(
+                    'SURFACE_TEST_START'
+                    if self.surface_servo_test_mode
+                    else 'SURFACE_START')
             else:
                 self._write('SURFACE_STOP')
             self._surface_running = surface_requested
@@ -711,7 +714,7 @@ class ActuatorDriverNode(Node):
         elif self.surface_servo_test_mode:
             status.level = DiagnosticStatus.WARN
             status.message = (
-                'D6 siringa 1200/1500 us darbe deseni testi etkin')
+                'D6 siringa 1200/1500/1800 us iki yon testi etkin')
         elif self.ignition_manual_test_mode:
             status.level = DiagnosticStatus.WARN
             status.message = 'D2 manuel 3 V olcum testi etkin'

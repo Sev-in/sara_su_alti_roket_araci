@@ -61,12 +61,14 @@ const unsigned long ESC_RAMP_ARALIGI_MS = 100;
 const unsigned long ARM_BEKLEME_MS = 3000;
 
 // D6 siringa servosu. D6 yalnizca sinyal uretir; servo kesinlikle
-// Uno 5 V pininden beslenmemelidir. Yuzeye cikis boyunca servo:
-//   1200 us / 500 ms calis -> 1500 us / 200 ms notr
-// dongusunu heartbeat ve SURFACE_START aktif kaldigi surece tekrarlar.
+// Uno 5 V pininden beslenmemelidir. Gercek gorevlerde yalnizca suyu
+// disari itme yonu kullanilir:
+//   1800 us / 500 ms calis -> 1500 us / 200 ms notr
+// Test modunda ise mekanik yon kontrolu icin 1200 ve 1800 us sirayla denenir.
 const uint8_t YUZEY_SERVO_PINI = 6;
 const uint16_t YUZEY_SERVO_DUR_US = 1500;
-const uint16_t YUZEY_SERVO_CALIS_US = 1200;
+const uint16_t YUZEY_SERVO_SUYU_ICERI_CEK_US = 1200;
+const uint16_t YUZEY_SERVO_SUYU_DISARI_IT_US = 1800;
 const unsigned long YUZEY_SERVO_CALIS_SURESI_MS = 500;
 const unsigned long YUZEY_SERVO_DUR_SURESI_MS = 200;
 
@@ -112,6 +114,9 @@ bool kanatKomutuAlindi = false;
 bool yuzeyServoCalisiyor = false;
 bool yuzeyServoDarbeAktif = false;
 bool yuzeyServoHareketFazi = false;
+bool yuzeyServoTestModu = false;
+bool yuzeyServoTestDisariYonu = false;
+uint16_t yuzeyServoAktifUs = YUZEY_SERVO_SUYU_DISARI_IT_US;
 unsigned long yuzeyServoFazBaslangicMs = 0;
 
 bool ateslemeIstegi = false;
@@ -169,16 +174,23 @@ void yuzeyServosunuDurdur()
 {
   yuzeyServoDarbeAktif = false;
   yuzeyServoHareketFazi = false;
+  yuzeyServoTestModu = false;
+  yuzeyServoAktifUs = YUZEY_SERVO_DUR_US;
   yuzeyServo.writeMicroseconds(YUZEY_SERVO_DUR_US);
   yuzeyServoCalisiyor = false;
 }
 
-void yuzeyServosunuBaslat()
+void yuzeyServosunuBaslat(bool testModu)
 {
+  yuzeyServoTestModu = testModu;
+  yuzeyServoTestDisariYonu = false;
+  yuzeyServoAktifUs = testModu
+      ? YUZEY_SERVO_SUYU_ICERI_CEK_US
+      : YUZEY_SERVO_SUYU_DISARI_IT_US;
   yuzeyServoDarbeAktif = true;
   yuzeyServoHareketFazi = true;
   yuzeyServoFazBaslangicMs = millis();
-  yuzeyServo.writeMicroseconds(YUZEY_SERVO_CALIS_US);
+  yuzeyServo.writeMicroseconds(yuzeyServoAktifUs);
   yuzeyServoCalisiyor = true;
 }
 
@@ -476,20 +488,21 @@ void komutuIsle(char *komut)
       yuzeyServosunuDurdur();
       Serial.println(F("ERR,HEARTBEAT_REQUIRED"));
     } else {
-      yuzeyServosunuBaslat();
+      // Gercek gorev: yalnizca 1800 us ile suyu disari it.
+      yuzeyServosunuBaslat(false);
       Serial.println(F("OK,SURFACE_PULSE_RUNNING"));
     }
     return;
   }
-  // Eski test araclariyla seri protokol uyumlulugu: artik 0-180 tarama
-  // yapmaz; gercek yuzeye cikis 1200/1500 us darbe desenini baslatir.
-  if (strcmp(komut, "SURFACE_SWEEP_START") == 0) {
+  if (strcmp(komut, "SURFACE_TEST_START") == 0 ||
+      strcmp(komut, "SURFACE_SWEEP_START") == 0) {
     if (!heartbeatGuncel()) {
       yuzeyServosunuDurdur();
       Serial.println(F("ERR,HEARTBEAT_REQUIRED"));
     } else {
-      yuzeyServosunuBaslat();
-      Serial.println(F("OK,SURFACE_PULSE_RUNNING"));
+      // Yalnizca test: 1200 ve 1800 us yonlerini sirayla dene.
+      yuzeyServosunuBaslat(true);
+      Serial.println(F("OK,SURFACE_TEST_RUNNING"));
     }
     return;
   }
@@ -624,9 +637,15 @@ void yuzeyServoDarbeDeseniniGuncelle()
 
   yuzeyServoFazBaslangicMs = simdi;
   yuzeyServoHareketFazi = !yuzeyServoHareketFazi;
+  if (yuzeyServoHareketFazi && yuzeyServoTestModu) {
+    yuzeyServoTestDisariYonu = !yuzeyServoTestDisariYonu;
+    yuzeyServoAktifUs = yuzeyServoTestDisariYonu
+        ? YUZEY_SERVO_SUYU_DISARI_IT_US
+        : YUZEY_SERVO_SUYU_ICERI_CEK_US;
+  }
   yuzeyServo.writeMicroseconds(
       yuzeyServoHareketFazi
-          ? YUZEY_SERVO_CALIS_US
+          ? yuzeyServoAktifUs
           : YUZEY_SERVO_DUR_US);
 }
 

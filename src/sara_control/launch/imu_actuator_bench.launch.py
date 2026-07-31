@@ -3,8 +3,9 @@
 
 Bu launch mission_start ve guidance dugumlerini baslatmaz. Burun kapagi
 su sensoru desenini izler. Siringa, enable_surface_servo aciksa surekli
-500 ms 1200 us / 200 ms 1500 us desenini tekrarlar. Manuel 3 V olcum
-testi ayrica enable_ignition_manual_test ile acikca etkinlestirilebilir;
+1200 ve 1800 us yonlerini, aralarda 1500 us notr ile sirayla dener.
+Manuel 3 V olcum testi ayrica enable_ignition_manual_test ile acikca
+etkinlestirilebilir;
 otomatik gorev atesleme komutu bench'te False tutulur. Ana guc kesme
 testi iki ayri onay acildiktan
 sonra /sara/bench/power_cutoff_request=True ile testin son adimi olarak
@@ -48,8 +49,8 @@ def generate_launch_description():
         'enable_surface_servo',
         default_value='false',
         description=(
-            'Uno D6 siringa servosunda 500 ms 1200 us / 200 ms 1500 us '
-            'yuzeye cikis desenini tekrarlar; '
+            'Uno D6 siringa servosunun 1200 ve 1800 us yonlerini, '
+            'aralarda 1500 us notr ile sirayla dener; '
             'actuator_driver motoru ve ateslemeyi zorla kapali tutar'
         ),
     )
