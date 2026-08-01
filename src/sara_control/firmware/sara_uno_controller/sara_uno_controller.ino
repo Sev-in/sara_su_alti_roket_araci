@@ -49,12 +49,12 @@ const float KANAT_SERVO_MAX_DERECE = 135.0f;
 
 // 45A cift yonlu sualti ESC:
 //   1500 us = arm/dur
-//   +1 = 1500..2000 us yonu (aracta dogrulanan itme yonu)
-//   -1 = 1500..1000 us yonu (aracta dogrulanan cekme yonu)
+//   Yazilimla secilen itme yonu: 1500 us'den 1100 us'ye azalan PWM.
+//   Rampa 20 us / 100 ms oldugu icin tam araliga yaklasik 2 sn'de ulasir.
 const uint16_t ESC_NOTR_US = 1500;
-const int8_t ESC_ITME_YONU = +1;
-const uint16_t ESC_TAM_ITKI_FARK_US = 500;
-const uint16_t ESC_MUTLAK_MIN_US = 1000;
+const int8_t ESC_ITME_YONU = -1;
+const uint16_t ESC_TAM_ITKI_FARK_US = 400;
+const uint16_t ESC_MUTLAK_MIN_US = 1100;
 const uint16_t ESC_MUTLAK_MAX_US = 2000;
 const uint16_t ESC_RAMP_ADIM_US = 20;
 const unsigned long ESC_RAMP_ARALIGI_MS = 100;
