@@ -59,8 +59,9 @@ def generate_launch_description():
         default_value='false',
         description=(
             'Yalniz bench testinde: dogrulanan 1500/5 s -> '
-            '1550..1600/5 s -> 1500/2 s -> 1450..1400/5 s -> '
-            '1500 us ESC yon sekansini bir kez calistir'
+            '1550..1600/5 s -> 1500/2 s -> 1450..1400 -> '
+            '1400 us itme sekansini calistir; itme kullanici '
+            '/sara/bench/esc_sequence_stop komutunu verene kadar surer'
         ),
     )
     surface_servo_arg = DeclareLaunchArgument(

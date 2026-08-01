@@ -174,6 +174,9 @@ class ActuatorDriverNode(Node):
         self.create_subscription(
             Bool, '/sara/safety/main_power_cutoff_command',
             self._on_power_cutoff, 10)
+        self.create_subscription(
+            Bool, '/sara/bench/esc_sequence_stop',
+            self._on_esc_sequence_stop, 10)
 
         self._serial_module = None
         self._serial = None
@@ -408,6 +411,14 @@ class ActuatorDriverNode(Node):
     def _on_emergency_stop(self, msg):
         self._emergency_stop = bool(msg.data)
 
+    def _on_esc_sequence_stop(self, msg):
+        if (
+            bool(msg.data)
+            and self.esc_direction_sequence_test_mode
+            and self._esc_sequence_requested
+        ):
+            self._write('ESC_DIRECTION_SEQUENCE_STOP')
+
     def _on_power_cutoff(self, msg):
         requested = bool(msg.data)
         if requested and not self._power_cutoff:
@@ -632,6 +643,9 @@ class ActuatorDriverNode(Node):
             self._esc_sequence_requested = True
             self._esc_sequence_done = False
             self._motor_state = 'ESC_SEQUENCE_RUNNING'
+            return
+        if line == 'OK,ESC_DIRECTION_SEQUENCE_STOPPING':
+            self._motor_state = 'ESC_SEQUENCE_STOPPING'
             return
         if line == 'OK,ESC_DIRECTION_SEQUENCE_DONE':
             self._esc_sequence_requested = False

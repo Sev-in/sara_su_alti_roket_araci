@@ -75,7 +75,6 @@ const unsigned long ESC_SEKANS_CALISMA_RAMP_MS = 200;
 const unsigned long ESC_SEKANS_CEKME_SURESI_MS = 5000;
 const unsigned long ESC_SEKANS_DURDURMA_RAMP_MS = 100;
 const unsigned long ESC_SEKANS_ARA_NOTR_MS = 2000;
-const unsigned long ESC_SEKANS_ITME_SURESI_MS = 5000;
 
 // D6 siringa servosu. D6 yalnizca sinyal uretir; servo kesinlikle
 // Uno 5 V pininden beslenmemelidir. Gercek gorevlerde yalnizca suyu
@@ -293,12 +292,9 @@ void escYonSekansiniGuncelle(unsigned long simdi)
     return;
   }
 
-  if (escYonSekansiDurumu == ESC_SEKANS_ITME_AKTIF &&
-      simdi - escSekansDurumBaslangicMs >= ESC_SEKANS_ITME_SURESI_MS) {
-    escYonSekansiDurumu = ESC_SEKANS_SON_DURDURMA;
-    escSekansSonRampMs = simdi;
-    return;
-  }
+  // Itme, kullanici ESC_DIRECTION_SEQUENCE_STOP komutunu verene kadar
+  // 1400 us'de devam eder. Heartbeat veya acil durdurma guvenlikleri
+  // her zaman bu beklemeyi kesip ESC'yi notr duruma getirir.
 
   if (escYonSekansiDurumu == ESC_SEKANS_SON_DURDURMA &&
       simdi - escSekansSonRampMs >= ESC_SEKANS_DURDURMA_RAMP_MS) {
@@ -635,6 +631,22 @@ void komutuIsle(char *komut)
     } else {
       escYonSekansiniBaslat();
       Serial.println(F("OK,ESC_DIRECTION_SEQUENCE_STARTED"));
+    }
+    return;
+  }
+  if (strcmp(komut, "ESC_DIRECTION_SEQUENCE_STOP") == 0) {
+    if (escYonSekansiDurumu == ESC_SEKANS_ITME_AKTIF) {
+      escYonSekansiDurumu = ESC_SEKANS_SON_DURDURMA;
+      escSekansSonRampMs = millis();
+      Serial.println(F("OK,ESC_DIRECTION_SEQUENCE_STOPPING"));
+    } else if (escYonSekansiAktif()) {
+      // Itme fazina gelmeden durdurulursa mevcut darbeden normal motor
+      // rampasi ile notr konuma don.
+      escYonSekansiDurumu = ESC_SEKANS_KAPALI;
+      hedefEscUs = ESC_NOTR_US;
+      Serial.println(F("OK,ESC_DIRECTION_SEQUENCE_STOPPING"));
+    } else {
+      Serial.println(F("OK,ESC_DIRECTION_SEQUENCE_NOT_RUNNING"));
     }
     return;
   }
