@@ -62,6 +62,21 @@ const unsigned long ESC_CALISMA_RAMP_ARALIGI_MS = 200;
 const unsigned long ESC_DURDURMA_RAMP_ARALIGI_MS = 100;
 const unsigned long ARM_BEKLEME_MS = 3000;
 
+// ROS bench modunda acikca istendiginde calisan, sahada dogrulanmis
+// c -> notr -> i ESC yon hazirlama sekansi. Normal gorev THRUST kontrolu
+// bu sabitleri kullanmaz ve varsayilan olarak sekans kapali kalir.
+const uint16_t ESC_SEKANS_CEKME_ILK_US = 1550;
+const uint16_t ESC_SEKANS_CEKME_HEDEF_US = 1600;
+const uint16_t ESC_SEKANS_ITME_ILK_US = 1450;
+const uint16_t ESC_SEKANS_ITME_HEDEF_US = 1400;
+const uint16_t ESC_SEKANS_RAMP_ADIM_US = 25;
+const unsigned long ESC_SEKANS_ACILIS_NOTR_MS = 5000;
+const unsigned long ESC_SEKANS_CALISMA_RAMP_MS = 200;
+const unsigned long ESC_SEKANS_CEKME_SURESI_MS = 5000;
+const unsigned long ESC_SEKANS_DURDURMA_RAMP_MS = 100;
+const unsigned long ESC_SEKANS_ARA_NOTR_MS = 2000;
+const unsigned long ESC_SEKANS_ITME_SURESI_MS = 5000;
+
 // D6 siringa servosu. D6 yalnizca sinyal uretir; servo kesinlikle
 // Uno 5 V pininden beslenmemelidir. Gercek gorevlerde yalnizca suyu
 // disari itme yonu kullanilir:
@@ -99,6 +114,19 @@ enum MotorDurumu : uint8_t {
   MOTOR_FAULT = 4
 };
 
+enum EscYonSekansiDurumu : uint8_t {
+  ESC_SEKANS_KAPALI = 0,
+  ESC_SEKANS_ACILIS_NOTR = 1,
+  ESC_SEKANS_CEKME_RAMPASI = 2,
+  ESC_SEKANS_CEKME_AKTIF = 3,
+  ESC_SEKANS_CEKME_DURDURMA = 4,
+  ESC_SEKANS_ARA_NOTR = 5,
+  ESC_SEKANS_ITME_RAMPASI = 6,
+  ESC_SEKANS_ITME_AKTIF = 7,
+  ESC_SEKANS_SON_DURDURMA = 8,
+  ESC_SEKANS_TAMAMLANDI = 9
+};
+
 MotorDurumu motorDurumu = MOTOR_DISARMED;
 uint16_t mevcutEscUs = ESC_NOTR_US;
 uint16_t hedefEscUs = ESC_NOTR_US;
@@ -107,6 +135,9 @@ unsigned long sonRampMs = 0;
 unsigned long sonHeartbeatMs = 0;
 bool heartbeatAlindi = false;
 bool anaGucKesildi = false;
+EscYonSekansiDurumu escYonSekansiDurumu = ESC_SEKANS_KAPALI;
+unsigned long escSekansDurumBaslangicMs = 0;
+unsigned long escSekansSonRampMs = 0;
 
 float pitchServoAcisi = 90.0f;
 float yawServoAcisi = 90.0f;
@@ -166,10 +197,123 @@ void burunKapaginiKapat()
 
 void motorNotr(MotorDurumu durum)
 {
+  escYonSekansiDurumu = ESC_SEKANS_KAPALI;
   hedefEscUs = ESC_NOTR_US;
   mevcutEscUs = ESC_NOTR_US;
   pwm.writeMicroseconds(ESC_KANALI, mevcutEscUs);
   motorDurumu = durum;
+}
+
+bool escYonSekansiAktif()
+{
+  return escYonSekansiDurumu >= ESC_SEKANS_ACILIS_NOTR &&
+         escYonSekansiDurumu <= ESC_SEKANS_SON_DURDURMA;
+}
+
+void escYonSekansiniBaslat()
+{
+  hedefEscUs = ESC_NOTR_US;
+  mevcutEscUs = ESC_NOTR_US;
+  pwm.writeMicroseconds(ESC_KANALI, mevcutEscUs);
+  motorDurumu = MOTOR_RUNNING;
+  escYonSekansiDurumu = ESC_SEKANS_ACILIS_NOTR;
+  escSekansDurumBaslangicMs = millis();
+  escSekansSonRampMs = millis();
+}
+
+void escYonSekansiniGuncelle(unsigned long simdi)
+{
+  if (escYonSekansiDurumu == ESC_SEKANS_ACILIS_NOTR &&
+      simdi - escSekansDurumBaslangicMs >= ESC_SEKANS_ACILIS_NOTR_MS) {
+    mevcutEscUs = ESC_SEKANS_CEKME_ILK_US;
+    pwm.writeMicroseconds(ESC_KANALI, mevcutEscUs);
+    escYonSekansiDurumu = ESC_SEKANS_CEKME_RAMPASI;
+    escSekansSonRampMs = simdi;
+    return;
+  }
+
+  if (escYonSekansiDurumu == ESC_SEKANS_CEKME_RAMPASI &&
+      simdi - escSekansSonRampMs >= ESC_SEKANS_CALISMA_RAMP_MS) {
+    escSekansSonRampMs = simdi;
+    if (mevcutEscUs >=
+        ESC_SEKANS_CEKME_HEDEF_US - ESC_SEKANS_RAMP_ADIM_US) {
+      mevcutEscUs = ESC_SEKANS_CEKME_HEDEF_US;
+      escYonSekansiDurumu = ESC_SEKANS_CEKME_AKTIF;
+      escSekansDurumBaslangicMs = simdi;
+    } else {
+      mevcutEscUs += ESC_SEKANS_RAMP_ADIM_US;
+    }
+    pwm.writeMicroseconds(ESC_KANALI, mevcutEscUs);
+    return;
+  }
+
+  if (escYonSekansiDurumu == ESC_SEKANS_CEKME_AKTIF &&
+      simdi - escSekansDurumBaslangicMs >=
+          ESC_SEKANS_CEKME_SURESI_MS) {
+    escYonSekansiDurumu = ESC_SEKANS_CEKME_DURDURMA;
+    escSekansSonRampMs = simdi;
+    return;
+  }
+
+  if (escYonSekansiDurumu == ESC_SEKANS_CEKME_DURDURMA &&
+      simdi - escSekansSonRampMs >= ESC_SEKANS_DURDURMA_RAMP_MS) {
+    escSekansSonRampMs = simdi;
+    mevcutEscUs = max(
+        (uint16_t)(mevcutEscUs - ESC_SEKANS_RAMP_ADIM_US),
+        ESC_NOTR_US);
+    pwm.writeMicroseconds(ESC_KANALI, mevcutEscUs);
+    if (mevcutEscUs == ESC_NOTR_US) {
+      escYonSekansiDurumu = ESC_SEKANS_ARA_NOTR;
+      escSekansDurumBaslangicMs = simdi;
+    }
+    return;
+  }
+
+  if (escYonSekansiDurumu == ESC_SEKANS_ARA_NOTR &&
+      simdi - escSekansDurumBaslangicMs >= ESC_SEKANS_ARA_NOTR_MS) {
+    mevcutEscUs = ESC_SEKANS_ITME_ILK_US;
+    pwm.writeMicroseconds(ESC_KANALI, mevcutEscUs);
+    escYonSekansiDurumu = ESC_SEKANS_ITME_RAMPASI;
+    escSekansSonRampMs = simdi;
+    return;
+  }
+
+  if (escYonSekansiDurumu == ESC_SEKANS_ITME_RAMPASI &&
+      simdi - escSekansSonRampMs >= ESC_SEKANS_CALISMA_RAMP_MS) {
+    escSekansSonRampMs = simdi;
+    if (mevcutEscUs <=
+        ESC_SEKANS_ITME_HEDEF_US + ESC_SEKANS_RAMP_ADIM_US) {
+      mevcutEscUs = ESC_SEKANS_ITME_HEDEF_US;
+      escYonSekansiDurumu = ESC_SEKANS_ITME_AKTIF;
+      escSekansDurumBaslangicMs = simdi;
+    } else {
+      mevcutEscUs -= ESC_SEKANS_RAMP_ADIM_US;
+    }
+    pwm.writeMicroseconds(ESC_KANALI, mevcutEscUs);
+    return;
+  }
+
+  if (escYonSekansiDurumu == ESC_SEKANS_ITME_AKTIF &&
+      simdi - escSekansDurumBaslangicMs >= ESC_SEKANS_ITME_SURESI_MS) {
+    escYonSekansiDurumu = ESC_SEKANS_SON_DURDURMA;
+    escSekansSonRampMs = simdi;
+    return;
+  }
+
+  if (escYonSekansiDurumu == ESC_SEKANS_SON_DURDURMA &&
+      simdi - escSekansSonRampMs >= ESC_SEKANS_DURDURMA_RAMP_MS) {
+    escSekansSonRampMs = simdi;
+    mevcutEscUs = min(
+        (uint16_t)(mevcutEscUs + ESC_SEKANS_RAMP_ADIM_US),
+        ESC_NOTR_US);
+    pwm.writeMicroseconds(ESC_KANALI, mevcutEscUs);
+    if (mevcutEscUs == ESC_NOTR_US) {
+      hedefEscUs = ESC_NOTR_US;
+      motorDurumu = MOTOR_ARMED;
+      escYonSekansiDurumu = ESC_SEKANS_TAMAMLANDI;
+      Serial.println(F("OK,ESC_DIRECTION_SEQUENCE_DONE"));
+    }
+  }
 }
 
 void yuzeyServosunuDurdur()
@@ -339,6 +483,11 @@ void sifirKalibrasyonuYap()
 
 void itkiKomutunuUygula(float normalizeItki)
 {
+  // Acikca baslatilan bench ESC sekansi kendi zamanlamasini yonetir.
+  // Periyodik THRUST=0 dahil normal komutlar sekansi bozamaz; ALL_STOP,
+  // MOTOR_STOP ve heartbeat kaybi yine sekansi sonlandirir.
+  if (escYonSekansiAktif()) return;
+
   normalizeItki = constrain(normalizeItki, 0.0f, 1.0f);
   if (normalizeItki <= 0.001f) {
     hedefEscUs = ESC_NOTR_US;
@@ -475,12 +624,27 @@ void komutuIsle(char *komut)
     }
     return;
   }
+  if (strcmp(komut, "ESC_DIRECTION_SEQUENCE_START") == 0) {
+    if (!heartbeatGuncel()) {
+      motorNotr(MOTOR_FAULT);
+      Serial.println(F("ERR,HEARTBEAT_REQUIRED"));
+    } else if (escYonSekansiAktif()) {
+      Serial.println(F("OK,ESC_DIRECTION_SEQUENCE_RUNNING"));
+    } else if (motorDurumu != MOTOR_ARMED) {
+      Serial.println(F("ERR,MOTOR_NOT_ARMED"));
+    } else {
+      escYonSekansiniBaslat();
+      Serial.println(F("OK,ESC_DIRECTION_SEQUENCE_STARTED"));
+    }
+    return;
+  }
   if (strcmp(komut, "MOTOR_DISARM") == 0) {
     motorNotr(MOTOR_DISARMED);
     Serial.println(F("OK,MOTOR_DISARMED"));
     return;
   }
   if (strcmp(komut, "MOTOR_STOP") == 0) {
+    escYonSekansiDurumu = ESC_SEKANS_KAPALI;
     hedefEscUs = ESC_NOTR_US;
     Serial.println(F("OK,MOTOR_STOPPING"));
     return;
@@ -585,6 +749,11 @@ void motoruGuncelle()
       simdi - armBaslangicMs >= ARM_BEKLEME_MS) {
     motorDurumu = MOTOR_ARMED;
     Serial.println(F("OK,MOTOR_ARMED"));
+  }
+
+  if (escYonSekansiAktif()) {
+    escYonSekansiniGuncelle(simdi);
+    return;
   }
 
   const unsigned long rampAraligiMs =
@@ -695,6 +864,8 @@ void basinciOkuVeYayinla()
   Serial.print(mevcutEscUs);
   Serial.print(F(",motor_state="));
   Serial.print((uint8_t)motorDurumu);
+  Serial.print(F(",esc_sequence_state="));
+  Serial.print((uint8_t)escYonSekansiDurumu);
   Serial.print(F(",heartbeat_ok="));
   Serial.print(heartbeatGuncel() ? 1 : 0);
   Serial.print(F(",pitch_deg="));

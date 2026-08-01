@@ -77,6 +77,7 @@ class ActuatorDriverNode(Node):
         self.declare_parameter('buoyancy_surface_threshold', -0.05)
         self.declare_parameter('surface_servo_test_mode', False)
         self.declare_parameter('surface_servo_test_pulse_us', 1800)
+        self.declare_parameter('esc_direction_sequence_test_mode', False)
         self.declare_parameter('ignition_manual_test_mode', False)
 
         self.declare_parameter('surface_reference_pa', 101325.0)
@@ -116,8 +117,19 @@ class ActuatorDriverNode(Node):
                 'surface_servo_test_pulse_us yalnizca 1200 veya 1800 '
                 'olabilir; guvenli varsayilan 1800 kullaniliyor.')
             self.surface_servo_test_pulse_us = 1800
+        self.esc_direction_sequence_test_mode = bool(
+            self.get_parameter(
+                'esc_direction_sequence_test_mode').value)
         self.ignition_manual_test_mode = bool(
             self.get_parameter('ignition_manual_test_mode').value)
+        if self.esc_direction_sequence_test_mode and (
+            self.surface_servo_test_mode
+            or self.ignition_manual_test_mode
+        ):
+            self.get_logger().error(
+                'ESC yon sekansi; siringa veya 3 V manuel test moduyla '
+                'ayni anda kullanilamaz. ESC sekansi kapatildi.')
+            self.esc_direction_sequence_test_mode = False
 
         self.surface_reference = float(
             self.get_parameter('surface_reference_pa').value)
@@ -183,6 +195,9 @@ class ActuatorDriverNode(Node):
         self._arm_requested = False
         self._motor_armed = False
         self._heartbeat_confirmed = False
+        self._esc_sequence_requested = False
+        self._esc_sequence_done = False
+        self._esc_sequence_state = None
 
         self._thrust = 0.0
         self._fin = Vector3()
@@ -236,6 +251,11 @@ class ActuatorDriverNode(Node):
             self.get_logger().warning(
                 'D2 MANUEL 3 V OLCUM TESTI ETKIN: gercek atesleyici '
                 'baglanmamis, yalniz multimetre/LED yuku kullanilmalidir.')
+        if self.esc_direction_sequence_test_mode:
+            self.get_logger().error(
+                'ESC YON SEKANSI TEST MODU ETKIN: 1500/5 s -> '
+                '1550..1600/5 s -> 1500/2 s -> 1450..1400/5 s -> '
+                '1500 us dizisi yalniz bench onayiyla calisacak.')
 
     def _connect(self):
         self._last_connect_attempt = time.monotonic()
@@ -280,6 +300,9 @@ class ActuatorDriverNode(Node):
         self._motor_armed = False
         self._arm_requested = False
         self._heartbeat_confirmed = False
+        self._esc_sequence_requested = False
+        self._esc_sequence_done = False
+        self._esc_sequence_state = None
         self._power_cutoff_commanded = False
         self._power_cutoff_confirmed = False
         self._surface_running_confirmed = False
@@ -316,6 +339,9 @@ class ActuatorDriverNode(Node):
         self._motor_armed = False
         self._arm_requested = False
         self._heartbeat_confirmed = False
+        self._esc_sequence_requested = False
+        self._esc_sequence_done = False
+        self._esc_sequence_state = None
         self._surface_running = False
         self._surface_running_confirmed = False
         self._surface_pulse_confirmed = False
@@ -441,6 +467,8 @@ class ActuatorDriverNode(Node):
             self._ignition_confirmed = False
             self._motor_armed = False
             self._arm_requested = False
+            self._esc_sequence_requested = False
+            self._esc_sequence_done = False
             return
         if not self._ignition_mode_configured:
             if self._write(
@@ -464,8 +492,23 @@ class ActuatorDriverNode(Node):
                 self._write('MOTOR_ARM')
                 self._arm_requested = True
 
+        if self.esc_direction_sequence_test_mode:
+            if not self._motion_permission:
+                if self._esc_sequence_requested:
+                    self._write('MOTOR_STOP')
+                self._esc_sequence_requested = False
+                self._esc_sequence_done = False
+            elif (
+                self._motor_armed
+                and not self._esc_sequence_requested
+                and not self._esc_sequence_done
+            ):
+                if self._write('ESC_DIRECTION_SEQUENCE_START'):
+                    self._esc_sequence_requested = True
+
         thrust = self._thrust if (
             not self.surface_servo_test_mode
+            and not self.esc_direction_sequence_test_mode
             and not self.ignition_manual_test_mode
             and
             self._motion_permission and self._motor_armed) else 0.0
@@ -583,6 +626,19 @@ class ActuatorDriverNode(Node):
             self._motor_state = 'ARMED'
             return
         if line in (
+            'OK,ESC_DIRECTION_SEQUENCE_STARTED',
+            'OK,ESC_DIRECTION_SEQUENCE_RUNNING',
+        ):
+            self._esc_sequence_requested = True
+            self._esc_sequence_done = False
+            self._motor_state = 'ESC_SEQUENCE_RUNNING'
+            return
+        if line == 'OK,ESC_DIRECTION_SEQUENCE_DONE':
+            self._esc_sequence_requested = False
+            self._esc_sequence_done = True
+            self._motor_state = 'ESC_SEQUENCE_DONE'
+            return
+        if line in (
             'OK,IGNITION_ACTIVE',
             'OK,IGNITION_MEASUREMENT_ACTIVE',
         ):
@@ -617,6 +673,8 @@ class ActuatorDriverNode(Node):
             ):
                 self._motor_armed = False
                 self._arm_requested = False
+                self._esc_sequence_requested = False
+                self._esc_sequence_done = False
             if 'HEARTBEAT' in line:
                 self._heartbeat_confirmed = False
             if 'IGNITION' in line or 'HEARTBEAT' in line:
@@ -654,6 +712,12 @@ class ActuatorDriverNode(Node):
                     self._esc_us = esc_us
             except (TypeError, ValueError, OverflowError):
                 pass
+        if 'esc_sequence_state' in values:
+            try:
+                self._esc_sequence_state = int(
+                    values['esc_sequence_state'])
+            except (TypeError, ValueError, OverflowError):
+                self._esc_sequence_state = None
         if 'heartbeat_ok' in values:
             try:
                 self._heartbeat_confirmed = (
@@ -776,6 +840,9 @@ class ActuatorDriverNode(Node):
             status.message = (
                 'D6 siringa '
                 f'{self.surface_servo_test_pulse_us}/1500 us testi etkin')
+        elif self.esc_direction_sequence_test_mode:
+            status.level = DiagnosticStatus.WARN
+            status.message = 'ESC c-notr-i yon sekansi bench testi etkin'
         elif self.ignition_manual_test_mode:
             status.level = DiagnosticStatus.WARN
             status.message = 'D2 manuel 3 V olcum testi etkin'
@@ -789,6 +856,20 @@ class ActuatorDriverNode(Node):
             KeyValue(
                 key='surface_servo_test_pulse_us',
                 value=str(self.surface_servo_test_pulse_us)),
+            KeyValue(
+                key='esc_direction_sequence_test_mode',
+                value=str(self.esc_direction_sequence_test_mode)),
+            KeyValue(
+                key='esc_sequence_requested',
+                value=str(self._esc_sequence_requested)),
+            KeyValue(
+                key='esc_sequence_done',
+                value=str(self._esc_sequence_done)),
+            KeyValue(
+                key='esc_sequence_state',
+                value=(
+                    '-' if self._esc_sequence_state is None
+                    else str(self._esc_sequence_state))),
             KeyValue(
                 key='uno_ready_source',
                 value=self._uno_ready_source),

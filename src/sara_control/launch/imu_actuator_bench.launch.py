@@ -54,6 +54,15 @@ def generate_launch_description():
             'itme rampasini tam olarak uygula; normal gorevlerde false kalir'
         ),
     )
+    esc_direction_sequence_arg = DeclareLaunchArgument(
+        'enable_esc_direction_sequence',
+        default_value='false',
+        description=(
+            'Yalniz bench testinde: dogrulanan 1500/5 s -> '
+            '1550..1600/5 s -> 1500/2 s -> 1450..1400/5 s -> '
+            '1500 us ESC yon sekansini bir kez calistir'
+        ),
+    )
     surface_servo_arg = DeclareLaunchArgument(
         'enable_surface_servo',
         default_value='false',
@@ -101,6 +110,8 @@ def generate_launch_description():
     motor_speed = LaunchConfiguration('motor_test_speed_ms')
     legacy_esc_test = LaunchConfiguration(
         'use_legacy_esc_full_reverse_test')
+    esc_direction_sequence = LaunchConfiguration(
+        'enable_esc_direction_sequence')
     enable_surface_servo = LaunchConfiguration('enable_surface_servo')
     surface_servo_pulse_us = LaunchConfiguration('surface_servo_pulse_us')
     enable_ignition_manual_test = LaunchConfiguration(
@@ -115,6 +126,7 @@ def generate_launch_description():
         confirm_arg,
         speed_arg,
         legacy_esc_arg,
+        esc_direction_sequence_arg,
         surface_servo_arg,
         surface_servo_pulse_arg,
         ignition_manual_test_arg,
@@ -137,6 +149,8 @@ def generate_launch_description():
                         enable_surface_servo, value_type=bool),
                     'surface_servo_test_pulse_us': ParameterValue(
                         surface_servo_pulse_us, value_type=int),
+                    'esc_direction_sequence_test_mode': ParameterValue(
+                        esc_direction_sequence, value_type=bool),
                     'ignition_manual_test_mode': ParameterValue(
                         enable_ignition_manual_test, value_type=bool),
                 },
