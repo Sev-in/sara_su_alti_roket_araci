@@ -49,6 +49,7 @@ class ImuActuatorBench(Node):
         self.declare_parameter('motor_test_speed_ms', 0.15)
         self.declare_parameter('max_motor_test_speed_ms', 0.70)
         self.declare_parameter('max_calibrated_speed_ms', 1.076)
+        self.declare_parameter('use_legacy_esc_full_reverse_test', False)
         self.declare_parameter('enable_power_cutoff_test', False)
         self.declare_parameter(
             'confirm_power_cutoff_test_safe', False)
@@ -80,13 +81,19 @@ class ImuActuatorBench(Node):
             float(self.get_parameter('max_calibrated_speed_ms').value),
         )
         self._motor_enabled = enable_motor and confirmed
+        self._legacy_esc_full_reverse_test = bool(
+            self.get_parameter(
+                'use_legacy_esc_full_reverse_test').value)
         self._motor_speed = (
             max(0.0, min(requested_speed, max_speed))
             if self._motor_enabled
             else 0.0
         )
-        self._thrust_request = clamp(
-            self._motor_speed / calibrated_speed, 0.0, 1.0)
+        self._thrust_request = (
+            1.0
+            if self._motor_enabled and self._legacy_esc_full_reverse_test
+            else clamp(self._motor_speed / calibrated_speed, 0.0, 1.0)
+        )
         power_cutoff_enabled = bool(
             self.get_parameter('enable_power_cutoff_test').value)
         power_cutoff_confirmed = bool(
@@ -191,6 +198,11 @@ class ImuActuatorBench(Node):
                 f'BENCH MOTOR TESTI ETKIN: hedef hiz={self._motor_speed:.3f} '
                 'm/s. Pervane sokulmus veya arac guvenli duzenekte '
                 'sabitlenmis olmalidir.')
+        if self._motor_enabled and self._legacy_esc_full_reverse_test:
+            self.get_logger().error(
+                'ESKI TAM ITME RAMPASI ETKIN: ESC 1500 us arm sonrasinda '
+                '1450 us ile baslayip 1100 us hedefine inecek. Bu mod '
+                'yalniz yon dogrulama bench testi icindir.')
         if power_cutoff_enabled and not power_cutoff_confirmed:
             self.get_logger().warn(
                 'Ana guc kesme testi istendi ancak '
@@ -418,6 +430,9 @@ class ImuActuatorBench(Node):
             KeyValue(
                 key='motor_enabled',
                 value=str(self._motor_enabled)),
+            KeyValue(
+                key='legacy_esc_full_reverse_test',
+                value=str(self._legacy_esc_full_reverse_test)),
             KeyValue(
                 key='thrust_request',
                 value=f'{thrust.data:.3f}'),

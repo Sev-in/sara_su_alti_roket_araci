@@ -49,16 +49,17 @@ const float KANAT_SERVO_MAX_DERECE = 135.0f;
 
 // 45A cift yonlu sualti ESC:
 //   1500 us = arm/dur
-//   Yazilimla secilen itme yonu: 1500 us'den 1000 us'ye azalan PWM.
-//   ESC veri araligi 1-2 ms'dir; 1500 us acilis/self-test notrudur.
-//   Rampa 20 us / 100 ms oldugu icin tam araliga yaklasik 2.5 sn'de ulasir.
+//   1500..2000 us = cekme yonu
+//   1500..1100 us = aracta daha once dogrulanan itme yonu
+// Motor ilk kez calistirilirken eski saha kodundaki gibi 1450 us ile
+// baslar; hedefe 25 us / 200 ms ile yavasca iner. Durdururken 1500 us'ye
+// 25 us / 100 ms ile kontrollu doner.
 const uint16_t ESC_NOTR_US = 1500;
-const int8_t ESC_ITME_YONU = -1;
-const uint16_t ESC_TAM_ITKI_FARK_US = 500;
-const uint16_t ESC_MUTLAK_MIN_US = 1000;
-const uint16_t ESC_MUTLAK_MAX_US = 2000;
-const uint16_t ESC_RAMP_ADIM_US = 20;
-const unsigned long ESC_RAMP_ARALIGI_MS = 100;
+const uint16_t ESC_ILK_CALISMA_US = 1450;
+const uint16_t ESC_TAM_ITKI_US = 1100;
+const uint16_t ESC_RAMP_ADIM_US = 25;
+const unsigned long ESC_CALISMA_RAMP_ARALIGI_MS = 200;
+const unsigned long ESC_DURDURMA_RAMP_ARALIGI_MS = 100;
 const unsigned long ARM_BEKLEME_MS = 3000;
 
 // D6 siringa servosu. D6 yalnizca sinyal uretir; servo kesinlikle
@@ -353,16 +354,23 @@ void itkiKomutunuUygula(float normalizeItki)
     Serial.println(F("ERR,MOTOR_NOT_ARMED"));
     return;
   }
-  // Yon isaretli tutulur; bu sayede -500 us hesabi Uno'da uint16_t
-  // tasmasina donusmez. Sonuc ayrıca ESC'nin guvenli araliginda sinirlanir.
-  const float escAralikUs =
-      (float)ESC_ITME_YONU * (float)ESC_TAM_ITKI_FARK_US;
+  // Oransal gorev kontrolu korunur; yalniz ilk hareket darbesi eski
+  // calisan ESC kodundaki 1450 us baslangicini aynen uygular.
+  // AVR'de uint16_t - uint16_t islemi negatif yerine tasabilir. Farki
+  // once float'a cevirerek 1100 - 1500 = -400 sonucunu garanti et.
+  const float escFarkiUs =
+      (float)ESC_TAM_ITKI_US - (float)ESC_NOTR_US;
   const long hesaplananEscUs = lroundf(
-      (float)ESC_NOTR_US + normalizeItki * escAralikUs);
+      (float)ESC_NOTR_US + normalizeItki * escFarkiUs);
   hedefEscUs = (uint16_t)constrain(
       hesaplananEscUs,
-      (long)ESC_MUTLAK_MIN_US,
-      (long)ESC_MUTLAK_MAX_US);
+      (long)ESC_TAM_ITKI_US,
+      (long)ESC_NOTR_US);
+  if (motorDurumu == MOTOR_ARMED) {
+    mevcutEscUs = ESC_ILK_CALISMA_US;
+    pwm.writeMicroseconds(ESC_KANALI, mevcutEscUs);
+    sonRampMs = millis();
+  }
   motorDurumu = MOTOR_RUNNING;
 }
 
@@ -579,7 +587,11 @@ void motoruGuncelle()
     Serial.println(F("OK,MOTOR_ARMED"));
   }
 
-  if (simdi - sonRampMs < ESC_RAMP_ARALIGI_MS) return;
+  const unsigned long rampAraligiMs =
+      (hedefEscUs == ESC_NOTR_US)
+          ? ESC_DURDURMA_RAMP_ARALIGI_MS
+          : ESC_CALISMA_RAMP_ARALIGI_MS;
+  if (simdi - sonRampMs < rampAraligiMs) return;
   sonRampMs = simdi;
   if (mevcutEscUs < hedefEscUs) {
     mevcutEscUs = min(

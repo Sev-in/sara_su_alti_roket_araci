@@ -46,6 +46,14 @@ def generate_launch_description():
         default_value='0.15',
         description='Bench motor hedef hizi; kod tarafinda en fazla 0.70 m/s',
     )
+    legacy_esc_arg = DeclareLaunchArgument(
+        'use_legacy_esc_full_reverse_test',
+        default_value='false',
+        description=(
+            'Yalniz guvenli ESC yon testinde eski calisan 1450->1100 us '
+            'itme rampasini tam olarak uygula; normal gorevlerde false kalir'
+        ),
+    )
     surface_servo_arg = DeclareLaunchArgument(
         'enable_surface_servo',
         default_value='false',
@@ -91,6 +99,8 @@ def generate_launch_description():
     enable_motor = LaunchConfiguration('enable_motor')
     confirmed = LaunchConfiguration('confirm_motor_test_safe')
     motor_speed = LaunchConfiguration('motor_test_speed_ms')
+    legacy_esc_test = LaunchConfiguration(
+        'use_legacy_esc_full_reverse_test')
     enable_surface_servo = LaunchConfiguration('enable_surface_servo')
     surface_servo_pulse_us = LaunchConfiguration('surface_servo_pulse_us')
     enable_ignition_manual_test = LaunchConfiguration(
@@ -104,6 +114,7 @@ def generate_launch_description():
         enable_motor_arg,
         confirm_arg,
         speed_arg,
+        legacy_esc_arg,
         surface_servo_arg,
         surface_servo_pulse_arg,
         ignition_manual_test_arg,
@@ -176,6 +187,8 @@ def generate_launch_description():
                         confirmed, value_type=bool),
                     'motor_test_speed_ms': ParameterValue(
                         motor_speed, value_type=float),
+                    'use_legacy_esc_full_reverse_test': ParameterValue(
+                        legacy_esc_test, value_type=bool),
                     'enable_power_cutoff_test': ParameterValue(
                         enable_power_cutoff, value_type=bool),
                     'confirm_power_cutoff_test_safe': ParameterValue(
