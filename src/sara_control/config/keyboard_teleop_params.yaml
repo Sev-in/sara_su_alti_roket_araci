@@ -7,6 +7,13 @@ guidance_node:
     turn_offset_deg: 25.0
     # Tus tekrari veya uzak baglanti kesilirse motorun durma suresi.
     command_timeout_s: 0.8
+    # R/F her basista hedef derinligi bu kadar degistirir. Derinlik pozitif
+    # asagi yonludur: R dalar, F yukselir.
+    depth_step_m: 0.10
+    minimum_target_depth_m: 0.0
+    maximum_target_depth_m: 2.0
+    # V ile yuzeye cikista iki su sensoru yuzeyi dogruladiginda ve bu
+    # derinligin altina inildiginde siringa istegi otomatik sonlanir.
+    surface_reached_depth_m: 0.15
     nav_status_timeout_s: 2.0
     control_rate_hz: 20.0
-

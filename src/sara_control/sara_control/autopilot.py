@@ -429,6 +429,7 @@ class AutopilotNode(Node):
                 'G2_GUVENLI_ATIS_BOLGESI',
                 'G2_TIRMANIS_35_DERECE',
                 'VIDEO_DEMO_YUZEYE_CIKIS_KAPAK_KAPALI',
+                'KEYBOARD_TELEOP_YUZEYE_CIKIS',
                 'GUVENLI_SONLANDIRMA',
                 'VIDEO_DEMO_GUVENLI_SONLANDIRMA',
             )

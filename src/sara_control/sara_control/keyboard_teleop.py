@@ -21,7 +21,11 @@ from geometry_msgs.msg import PoseStamped
 from nav_msgs.msg import Odometry
 from std_msgs.msg import Bool, Float64, String
 
-from sara_control.keyboard_teleop_logic import STOP, command_for_key
+from sara_control.keyboard_teleop_logic import (
+    STOP,
+    adjusted_depth_target,
+    command_for_key,
+)
 from sara_control.math_utils import (
     euler_to_quaternion,
     quaternion_to_yaw_pitch_roll,
@@ -38,6 +42,10 @@ class KeyboardTeleopGuidanceNode(Node):
         self.declare_parameter('forward_speed_ms', 0.18)
         self.declare_parameter('turn_offset_deg', 25.0)
         self.declare_parameter('command_timeout_s', 0.8)
+        self.declare_parameter('depth_step_m', 0.10)
+        self.declare_parameter('minimum_target_depth_m', 0.0)
+        self.declare_parameter('maximum_target_depth_m', 2.0)
+        self.declare_parameter('surface_reached_depth_m', 0.15)
         self.declare_parameter('nav_status_timeout_s', 2.0)
         self.declare_parameter('control_rate_hz', 20.0)
 
@@ -47,6 +55,14 @@ class KeyboardTeleopGuidanceNode(Node):
             self.get_parameter('turn_offset_deg').value))
         self.command_timeout = float(
             self.get_parameter('command_timeout_s').value)
+        self.depth_step = float(
+            self.get_parameter('depth_step_m').value)
+        self.minimum_target_depth = float(
+            self.get_parameter('minimum_target_depth_m').value)
+        self.maximum_target_depth = float(
+            self.get_parameter('maximum_target_depth_m').value)
+        self.surface_reached_depth = float(
+            self.get_parameter('surface_reached_depth_m').value)
         self.nav_status_timeout = float(
             self.get_parameter('nav_status_timeout_s').value)
 
@@ -56,6 +72,13 @@ class KeyboardTeleopGuidanceNode(Node):
             raise ValueError('command_timeout_s 0 ile 2 saniye arasinda olmali')
         if not 0.0 < self.turn_offset <= math.radians(45.0):
             raise ValueError('turn_offset_deg 0 ile 45 derece arasinda olmali')
+        if self.depth_step <= 0.0:
+            raise ValueError('depth_step_m pozitif olmali')
+        if self.minimum_target_depth < 0.0:
+            raise ValueError('minimum_target_depth_m negatif olamaz')
+        if self.maximum_target_depth <= self.minimum_target_depth:
+            raise ValueError(
+                'maximum_target_depth_m minimum degerden buyuk olmali')
 
         self._depth = 0.0
         self._heading = 0.0
@@ -67,8 +90,10 @@ class KeyboardTeleopGuidanceNode(Node):
         self._nav_status_level = DiagnosticStatus.STALE
         self._last_nav_status_time = None
         self._motion_permission = False
+        self._surface_detected = False
         self._emergency_stop = False
         self._leak_detected = False
+        self._surface_mode = False
         self._active_command = STOP
         self._last_motion_key_time = None
         self._tty_stream = None
@@ -80,6 +105,9 @@ class KeyboardTeleopGuidanceNode(Node):
         self.create_subscription(
             DiagnosticStatus, '/sara/navigation/status',
             self._on_nav_status, 10)
+        self.create_subscription(
+            Bool, '/sara/navigation/surface_detected',
+            self._on_surface_detected, 10)
         self.create_subscription(
             Bool, '/sara/mission_start/motion_permission',
             self._on_motion_permission, 10)
@@ -113,7 +141,9 @@ class KeyboardTeleopGuidanceNode(Node):
 
         self.get_logger().warning(
             'KLAVYE TELEOP ETKIN: W=ileri, A=sol, D=sag, '
-            'S/SPACE=dur. Hareket icin tusu basili tutun; '
+            'R=10cm dal, F=10cm yuksel, C=derinlik referansi, '
+            'V=siringayla yuzeye cik, S/SPACE=dur. '
+            'Hareket icin W/A/D tusunu basili tutun; '
             f'{self.command_timeout:.1f} sn veri gelmezse motor durur.')
 
     def _open_keyboard(self):
@@ -167,6 +197,9 @@ class KeyboardTeleopGuidanceNode(Node):
     def _on_motion_permission(self, msg):
         self._motion_permission = bool(msg.data)
 
+    def _on_surface_detected(self, msg):
+        self._surface_detected = bool(msg.data)
+
     def _on_emergency_stop(self, msg):
         self._emergency_stop = bool(msg.data)
 
@@ -191,22 +224,64 @@ class KeyboardTeleopGuidanceNode(Node):
             return
         while select.select([self._tty_stream], [], [], 0.0)[0]:
             key = self._tty_stream.read(1)
+            key_lower = key.lower()
+            if key_lower in ('r', 'f'):
+                if not self._odom_received:
+                    continue
+                self._surface_mode = False
+                change = self.depth_step if key_lower == 'r' else -self.depth_step
+                self._target_depth = adjusted_depth_target(
+                    self._target_depth,
+                    change,
+                    self.minimum_target_depth,
+                    self.maximum_target_depth,
+                )
+                if self._active_command is not STOP:
+                    self._last_motion_key_time = self.get_clock().now()
+                continue
+            if key_lower == 'c':
+                self._surface_mode = False
+                self._stop_motion(capture_depth=True)
+                continue
+            if key_lower == 'v':
+                if not (
+                    self._tty_stream is not None
+                    and self._nav_ready()
+                    and self._motion_permission
+                    and not self._emergency_stop
+                    and not self._leak_detected
+                ):
+                    self.get_logger().warning(
+                        'V yuzeye cikis reddedildi: navigasyon veya '
+                        'hareket izni hazir degil.',
+                        throttle_duration_sec=2.0,
+                    )
+                    continue
+                self._active_command = STOP
+                self._last_motion_key_time = None
+                self._surface_mode = True
+                self._target_depth = self.minimum_target_depth
+                self._target_heading = self._heading
+                continue
             command = command_for_key(key)
             if command is None:
                 continue
             if command is STOP:
-                self._stop_motion()
+                self._surface_mode = False
+                self._stop_motion(capture_depth=True)
                 continue
+            self._surface_mode = False
             if self._active_command is STOP:
                 self._target_depth = self._depth
                 self._target_heading = self._heading
             self._active_command = command
             self._last_motion_key_time = self.get_clock().now()
 
-    def _stop_motion(self):
+    def _stop_motion(self, capture_depth=False):
         self._active_command = STOP
         self._last_motion_key_time = None
-        self._target_depth = self._depth
+        if capture_depth:
+            self._target_depth = self._depth
         self._target_heading = self._heading
 
     def _motion_key_fresh(self):
@@ -227,9 +302,38 @@ class KeyboardTeleopGuidanceNode(Node):
             and not self._emergency_stop
             and not self._leak_detected
             and self._motion_key_fresh()
+            and not self._surface_mode
         )
         if not allowed:
-            self._stop_motion()
+            was_moving = self._active_command is not STOP
+            self._stop_motion(
+                capture_depth=was_moving and not self._surface_mode)
+
+        if self._surface_mode and (
+            not self._nav_ready()
+            or not self._motion_permission
+            or self._emergency_stop
+            or self._leak_detected
+        ):
+            self._surface_mode = False
+            self._target_depth = self._depth
+
+        surface_allowed = (
+            self._surface_mode
+            and self._tty_stream is not None
+            and self._nav_ready()
+            and self._motion_permission
+            and not self._emergency_stop
+            and not self._leak_detected
+        )
+        if (
+            surface_allowed
+            and self._surface_detected
+            and self._depth <= self.surface_reached_depth
+        ):
+            self._surface_mode = False
+            self._target_depth = self._depth
+            surface_allowed = False
 
         moving = allowed and self._active_command.forward
         if moving and self._active_command.turn_sign:
@@ -250,7 +354,11 @@ class KeyboardTeleopGuidanceNode(Node):
         self._target_pub.publish(pose)
 
         phase = String()
-        phase.data = f'KEYBOARD_TELEOP_{self._active_command.name}'
+        phase.data = (
+            'KEYBOARD_TELEOP_YUZEYE_CIKIS'
+            if surface_allowed
+            else f'KEYBOARD_TELEOP_{self._active_command.name}'
+        )
         self._phase_pub.publish(phase)
 
         forward = Bool()
@@ -277,6 +385,7 @@ class KeyboardTeleopGuidanceNode(Node):
             KeyValue(key='teleop_mode', value='True'),
             KeyValue(key='command', value=self._active_command.name),
             KeyValue(key='moving', value=str(moving)),
+            KeyValue(key='surface_mode', value=str(surface_allowed)),
             KeyValue(
                 key='motion_permission',
                 value=str(self._motion_permission)),
@@ -299,7 +408,8 @@ class KeyboardTeleopGuidanceNode(Node):
         self._status_pub.publish(status)
 
     def destroy_node(self):
-        self._stop_motion()
+        self._surface_mode = False
+        self._stop_motion(capture_depth=True)
         self._close_keyboard()
         return super().destroy_node()
 
@@ -319,4 +429,3 @@ def main(args=None):
 
 if __name__ == '__main__':
     main()
-

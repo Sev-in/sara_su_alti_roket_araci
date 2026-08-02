@@ -31,3 +31,15 @@ def command_for_key(key: str):
         ' ': STOP,
     }.get(key.lower())
 
+
+def adjusted_depth_target(
+    current_target: float,
+    change_m: float,
+    minimum_m: float,
+    maximum_m: float,
+) -> float:
+    """Derinlik hedefini arac sinirlari icinde gunceller."""
+
+    if minimum_m > maximum_m:
+        raise ValueError('minimum_m, maximum_m degerinden buyuk olamaz')
+    return max(minimum_m, min(maximum_m, current_target + change_m))
