@@ -99,6 +99,7 @@ class KeyboardTeleopGuidanceNode(Node):
         self._tty_stream = None
         self._tty_settings = None
         self._keyboard_error = '-'
+        self._last_external_keyboard_time = None
 
         self.create_subscription(
             Odometry, '/sara/navigation/odom', self._on_odom, 10)
@@ -116,6 +117,11 @@ class KeyboardTeleopGuidanceNode(Node):
             self._on_emergency_stop, 10)
         self.create_subscription(
             Bool, '/sara/safety/leak_detected', self._on_leak, 10)
+        self.create_subscription(
+            String, '/sara/teleop/key', self._on_external_key, 10)
+        self.create_subscription(
+            Bool, '/sara/teleop/keyboard_alive',
+            self._on_external_keyboard_alive, 10)
 
         self._target_pub = self.create_publisher(
             PoseStamped, '/sara/guidance/target_pose', 10)
@@ -206,6 +212,25 @@ class KeyboardTeleopGuidanceNode(Node):
     def _on_leak(self, msg):
         self._leak_detected = bool(msg.data)
 
+    def _on_external_key(self, msg):
+        self._last_external_keyboard_time = self.get_clock().now()
+        self._handle_key(msg.data[:1] if msg.data else '')
+
+    def _on_external_keyboard_alive(self, msg):
+        if msg.data:
+            self._last_external_keyboard_time = self.get_clock().now()
+
+    def _external_keyboard_fresh(self):
+        if self._last_external_keyboard_time is None:
+            return False
+        age = (
+            self.get_clock().now() - self._last_external_keyboard_time
+        ).nanoseconds * 1e-9
+        return age < 1.0
+
+    def _keyboard_ready(self):
+        return self._tty_stream is not None or self._external_keyboard_fresh()
+
     def _nav_ready(self):
         if not self._odom_received or self._last_nav_status_time is None:
             return False
@@ -224,58 +249,61 @@ class KeyboardTeleopGuidanceNode(Node):
             return
         while select.select([self._tty_stream], [], [], 0.0)[0]:
             key = self._tty_stream.read(1)
-            key_lower = key.lower()
-            if key_lower in ('r', 'f'):
-                if not self._odom_received:
-                    continue
-                self._surface_mode = False
-                change = self.depth_step if key_lower == 'r' else -self.depth_step
-                self._target_depth = adjusted_depth_target(
-                    self._target_depth,
-                    change,
-                    self.minimum_target_depth,
-                    self.maximum_target_depth,
-                )
-                if self._active_command is not STOP:
-                    self._last_motion_key_time = self.get_clock().now()
-                continue
-            if key_lower == 'c':
-                self._surface_mode = False
-                self._stop_motion(capture_depth=True)
-                continue
-            if key_lower == 'v':
-                if not (
-                    self._tty_stream is not None
-                    and self._nav_ready()
-                    and self._motion_permission
-                    and not self._emergency_stop
-                    and not self._leak_detected
-                ):
-                    self.get_logger().warning(
-                        'V yuzeye cikis reddedildi: navigasyon veya '
-                        'hareket izni hazir degil.',
-                        throttle_duration_sec=2.0,
-                    )
-                    continue
-                self._active_command = STOP
-                self._last_motion_key_time = None
-                self._surface_mode = True
-                self._target_depth = self.minimum_target_depth
-                self._target_heading = self._heading
-                continue
-            command = command_for_key(key)
-            if command is None:
-                continue
-            if command is STOP:
-                self._surface_mode = False
-                self._stop_motion(capture_depth=True)
-                continue
+            self._handle_key(key)
+
+    def _handle_key(self, key):
+        key_lower = key.lower()
+        if key_lower in ('r', 'f'):
+            if not self._odom_received:
+                return
             self._surface_mode = False
-            if self._active_command is STOP:
-                self._target_depth = self._depth
-                self._target_heading = self._heading
-            self._active_command = command
-            self._last_motion_key_time = self.get_clock().now()
+            change = self.depth_step if key_lower == 'r' else -self.depth_step
+            self._target_depth = adjusted_depth_target(
+                self._target_depth,
+                change,
+                self.minimum_target_depth,
+                self.maximum_target_depth,
+            )
+            if self._active_command is not STOP:
+                self._last_motion_key_time = self.get_clock().now()
+            return
+        if key_lower == 'c':
+            self._surface_mode = False
+            self._stop_motion(capture_depth=True)
+            return
+        if key_lower == 'v':
+            if not (
+                self._keyboard_ready()
+                and self._nav_ready()
+                and self._motion_permission
+                and not self._emergency_stop
+                and not self._leak_detected
+            ):
+                self.get_logger().warning(
+                    'V yuzeye cikis reddedildi: navigasyon veya '
+                    'hareket izni hazir degil.',
+                    throttle_duration_sec=2.0,
+                )
+                return
+            self._active_command = STOP
+            self._last_motion_key_time = None
+            self._surface_mode = True
+            self._target_depth = self.minimum_target_depth
+            self._target_heading = self._heading
+            return
+        command = command_for_key(key)
+        if command is None:
+            return
+        if command is STOP:
+            self._surface_mode = False
+            self._stop_motion(capture_depth=True)
+            return
+        self._surface_mode = False
+        if self._active_command is STOP:
+            self._target_depth = self._depth
+            self._target_heading = self._heading
+        self._active_command = command
+        self._last_motion_key_time = self.get_clock().now()
 
     def _stop_motion(self, capture_depth=False):
         self._active_command = STOP
@@ -296,7 +324,7 @@ class KeyboardTeleopGuidanceNode(Node):
         self._poll_keyboard()
 
         allowed = (
-            self._tty_stream is not None
+            self._keyboard_ready()
             and self._nav_ready()
             and self._motion_permission
             and not self._emergency_stop
@@ -320,7 +348,7 @@ class KeyboardTeleopGuidanceNode(Node):
 
         surface_allowed = (
             self._surface_mode
-            and self._tty_stream is not None
+            and self._keyboard_ready()
             and self._nav_ready()
             and self._motion_permission
             and not self._emergency_stop
@@ -375,7 +403,7 @@ class KeyboardTeleopGuidanceNode(Node):
         status = DiagnosticStatus()
         status.name = 'sara_guidance'
         status.hardware_id = 'jetson_orin_nano_keyboard_teleop'
-        ready = self._tty_stream is not None and self._nav_ready()
+        ready = self._keyboard_ready() and self._nav_ready()
         status.level = (
             DiagnosticStatus.OK if ready else DiagnosticStatus.ERROR)
         status.message = (
@@ -392,7 +420,10 @@ class KeyboardTeleopGuidanceNode(Node):
             KeyValue(key='nav_ready', value=str(self._nav_ready())),
             KeyValue(
                 key='keyboard_ready',
-                value=str(self._tty_stream is not None)),
+                value=str(self._keyboard_ready())),
+            KeyValue(
+                key='external_keyboard_fresh',
+                value=str(self._external_keyboard_fresh())),
             KeyValue(key='keyboard_error', value=self._keyboard_error),
             KeyValue(
                 key='target_speed_ms', value=f'{speed.data:.3f}'),
