@@ -39,6 +39,7 @@ setup(
             'actuator_driver = sara_control.actuator_driver:main',
             'autopilot = sara_control.autopilot:main',
             'guidance = sara_control.guidance:main',
+            'keyboard_teleop = sara_control.keyboard_teleop:main',
             'imu_actuator_bench = sara_control.imu_actuator_bench:main',
             'mission_start = sara_control.mission_start:main',
             'navigation = sara_control.navigation:main',

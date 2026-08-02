@@ -22,7 +22,8 @@ KULLANIM:
 
 ARGUMANLAR:
     mission_id     : '1' (Seyir Gorevi) veya '2' (Atis Gorevi). Varsayilan: '1'
-    guidance_mode  : 'mission' normal Gorev 1/2 veya 'video_demo'.
+    guidance_mode  : 'mission' normal Gorev 1/2, 'video_demo' otonom havuz
+                     gosterimi veya 'keyboard_teleop' uzaktan klavye kontrolu.
                      VIDEO_DEMO icin dogrudan video_demo.launch.py kullanin.
     VIDEO_DEMO burun ayirma/3 V gosterimi icermez; bu test karada yapilir.
     mode           : 'test' (vehicle_sim) veya 'hardware' (gercek sensor/eyleyici
@@ -87,7 +88,7 @@ def generate_launch_description():
         'guidance_mode', default_value='mission',
         description=(
             "'mission' normal Gorev 1/2 gudumu; 'video_demo' havuz "
-            "gorev kabiliyeti gosterimi"
+            "gorev kabiliyeti gosterimi; 'keyboard_teleop' W/A/D kontrolu"
         ),
     )
     mode_arg = DeclareLaunchArgument(
@@ -171,6 +172,14 @@ def generate_launch_description():
     ])
     is_video_demo_guidance = PythonExpression([
         "'", guidance_mode, "' == 'video_demo'",
+    ])
+    is_keyboard_teleop_guidance = PythonExpression([
+        "'", guidance_mode, "' == 'keyboard_teleop'",
+    ])
+    is_video_or_teleop_guidance = PythonExpression([
+        "'", guidance_mode,
+        "' == 'video_demo' or '", guidance_mode,
+        "' == 'keyboard_teleop'",
     ])
     start_hardware_mavros = PythonExpression([
         "'", mode, "' == 'hardware' and '",
@@ -278,6 +287,17 @@ def generate_launch_description():
         condition=IfCondition(is_video_demo_guidance),
     )
 
+    keyboard_teleop_node = Node(
+        package='sara_control',
+        executable='keyboard_teleop',
+        name='guidance_node',
+        output='screen',
+        parameters=[
+            os.path.join(config_dir, 'keyboard_teleop_params.yaml'),
+        ],
+        condition=IfCondition(is_keyboard_teleop_guidance),
+    )
+
     autopilot_node = Node(
         package='sara_control',
         executable='autopilot',
@@ -295,7 +315,7 @@ def generate_launch_description():
             os.path.join(config_dir, 'safety_params.yaml'),
             {
                 'video_demo_mode': ParameterValue(
-                    is_video_demo_guidance,
+                    is_video_or_teleop_guidance,
                     value_type=bool,
                 ),
                 'video_demo_ignition_enabled': False,
@@ -348,6 +368,7 @@ def generate_launch_description():
         mission_start_node,
         guidance_node,
         video_demo_guidance_node,
+        keyboard_teleop_node,
         autopilot_node,
         safety_node,
         wave_estimator_node,
