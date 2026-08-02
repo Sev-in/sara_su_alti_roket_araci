@@ -2,6 +2,7 @@ import math
 import unittest
 
 from sara_control.uno_protocol import (
+    esc_auto_prepare_action,
     gauge_kpa_to_absolute_pa,
     ignition_output_confirms_command,
     normalized_fin_to_servo,
@@ -60,6 +61,41 @@ class UnoProtocolTests(unittest.TestCase):
             ignition_output_confirms_command(True, False))
         self.assertFalse(
             ignition_output_confirms_command(False, True))
+
+    def test_esc_auto_prepare_starts_on_first_drive_request(self):
+        self.assertEqual(
+            esc_auto_prepare_action(
+                True, True, False, False, False, False, 0),
+            'start',
+        )
+
+    def test_esc_auto_prepare_releases_at_itme_state(self):
+        self.assertEqual(
+            esc_auto_prepare_action(
+                True, True, False, True, False, False, 7),
+            'release',
+        )
+
+    def test_esc_auto_prepare_deadman_stops_active_sequence(self):
+        self.assertEqual(
+            esc_auto_prepare_action(
+                True, False, False, True, False, False, 3),
+            'stop',
+        )
+
+    def test_esc_auto_prepare_uses_normal_thrust_when_ready(self):
+        self.assertEqual(
+            esc_auto_prepare_action(
+                True, True, True, False, False, False, 9),
+            'normal',
+        )
+
+    def test_esc_auto_prepare_disabled_never_starts_sequence(self):
+        self.assertEqual(
+            esc_auto_prepare_action(
+                False, True, False, False, False, False, 0),
+            'normal',
+        )
 
 
 if __name__ == '__main__':

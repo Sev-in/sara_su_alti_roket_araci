@@ -37,6 +37,12 @@ actuator_driver:
     # Yalniz bench launch'ta acik onayla true yapilir. Normal gorevde
     # 3 V cikisi safety tarafindan otomatik yonetilir.
     ignition_manual_test_mode: false
+    # Ilk pozitif itki isteginde ESC'nin cekme-notr-itme hazirligini
+    # otomatik yapar. Genel varsayilan false; keyboard_teleop hardware
+    # launch'i bunu acikca true yapar. Otonom gorevlerde ters yonlu 5 sn
+    # hareket gorev geometrisini bozabilecegi icin fiziksel testten once
+    # otomatik olarak etkinlestirilmez.
+    esc_auto_direction_prepare: false
 
     # Uno, acilista aldigi sifira gore gauge kPa yollar. ROS mesajina
     # donusurken bu yuzey referansi eklenir; navigation.py yine kendi

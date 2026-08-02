@@ -135,6 +135,14 @@ def generate_launch_description():
             '1800=disari it; normal gorev daima 1800 kullanir'
         )
     )
+    esc_auto_prepare_arg = DeclareLaunchArgument(
+        'esc_auto_direction_prepare', default_value='false',
+        description=(
+            'Ilk pozitif itki isteginde ESC cekme-notr-itme hazirligini '
+            'uygula; yalniz fiziksel olarak dogrulanmis hardware '
+            'kullaniminda true yapilmalidir'
+        )
+    )
     start_mavros_arg = DeclareLaunchArgument(
         'start_mavros', default_value='true',
         description=(
@@ -162,6 +170,8 @@ def generate_launch_description():
         'surface_servo_test_mode')
     surface_servo_test_pulse_us = LaunchConfiguration(
         'surface_servo_test_pulse_us')
+    esc_auto_direction_prepare = LaunchConfiguration(
+        'esc_auto_direction_prepare')
     start_mavros = LaunchConfiguration('start_mavros')
     fcu_url = LaunchConfiguration('fcu_url')
 
@@ -222,6 +232,8 @@ def generate_launch_description():
                     surface_servo_test_mode, value_type=bool),
                 'surface_servo_test_pulse_us': ParameterValue(
                     surface_servo_test_pulse_us, value_type=int),
+                'esc_auto_direction_prepare': ParameterValue(
+                    esc_auto_direction_prepare, value_type=bool),
             },
         ],
         condition=IfCondition(is_hardware_mode),
@@ -356,6 +368,7 @@ def generate_launch_description():
         auto_start_arg,
         surface_servo_test_arg,
         surface_servo_pulse_arg,
+        esc_auto_prepare_arg,
         start_mavros_arg,
         fcu_url_arg,
 

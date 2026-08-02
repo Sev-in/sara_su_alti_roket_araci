@@ -37,6 +37,24 @@ Sistem durumu dogrulanmadan `start_command` gondermeyin. Pervane, atesleme,
 ana guc kesme ve su sizdirmazligi icin fiziksel guvenlik proseduru yazilimdan
 bagimsiz olarak uygulanmalidir.
 
+## Klavye kontrolu ve ESC yon hazirligi
+
+Hardware klavye launch'i, ilk pozitif `W/A/D` isteginde bu aracta fiziksel
+olarak dogrulanan cekme-notr-itme ESC hazirligini otomatik uygular:
+
+```bash
+ros2 launch sara_control keyboard_teleop.launch.py \
+  mode:=hardware auto_start:=true
+```
+
+Hazirlik sirasinda hareket tusu deadman nedeniyle yenilenmelidir; `W`, `A`
+veya `D` basili tutulur. `S`, SPACE, klavye heartbeat kaybi, safety stop,
+Uno heartbeat kaybi ve D5 istegi sekansi kesip ESC'yi notr duruma goturur.
+Itme fazi 1400 us'ye ulastiginda firmware sekansi serbest birakir ve normal
+oransal `THRUST` kontrolu devam eder. Bu otomatik davranis yalniz klavye
+hardware launch'inda varsayilan aciktir; Gorev 1/2'de ters yonlu hazirlik
+hareketi gorev geometrisini bozabilecegi icin varsayilan kapali tutulur.
+
 ## Ana dizinler
 
 ```text

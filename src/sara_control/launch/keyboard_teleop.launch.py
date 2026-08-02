@@ -16,6 +16,7 @@ def generate_launch_description():
     log_directory = LaunchConfiguration('log_directory')
     auto_start = LaunchConfiguration('auto_start')
     motor_inhibit = LaunchConfiguration('motor_inhibit_duration_s')
+    esc_auto_prepare = LaunchConfiguration('esc_auto_direction_prepare')
 
     sara_system = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
@@ -35,6 +36,7 @@ def generate_launch_description():
             'auto_start': auto_start,
             'motor_inhibit_duration_s': motor_inhibit,
             'surface_servo_test_mode': 'false',
+            'esc_auto_direction_prepare': esc_auto_prepare,
         }.items(),
     )
 
@@ -71,6 +73,13 @@ def generate_launch_description():
             default_value='60.0',
             description='Motor hareket izni oncesi guvenlik beklemesi',
         ),
+        DeclareLaunchArgument(
+            'esc_auto_direction_prepare',
+            default_value='true',
+            description=(
+                'Hardware klavye kontrolunde ilk W/A/D komutunda '
+                'cekme-notr-itme ESC hazirligini uygula'
+            ),
+        ),
         sara_system,
     ])
-

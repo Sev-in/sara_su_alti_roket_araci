@@ -42,6 +42,29 @@ def ignition_output_confirms_command(output_active, command_active):
     return bool(output_active) and bool(command_active)
 
 
+def esc_auto_prepare_action(
+    enabled,
+    drive_requested,
+    prepared,
+    sequence_requested,
+    release_requested,
+    stop_requested,
+    sequence_state,
+):
+    """Normal itki oncesi ESC yon hazirliginin bir sonraki eylemi."""
+    if not enabled or prepared:
+        return 'normal'
+    if not drive_requested:
+        if sequence_requested and not stop_requested:
+            return 'stop'
+        return 'idle'
+    if not sequence_requested and not stop_requested:
+        return 'start'
+    if int(sequence_state or 0) == 7 and not release_requested:
+        return 'release'
+    return 'wait'
+
+
 def parse_telemetry_line(line):
     """Uno'nun ``anahtar=deger`` telemetri satirini ayristir.
 

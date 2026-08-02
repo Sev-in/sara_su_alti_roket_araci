@@ -650,6 +650,25 @@ void komutuIsle(char *komut)
     }
     return;
   }
+  if (strcmp(komut, "ESC_DIRECTION_SEQUENCE_RELEASE") == 0) {
+    // Otomatik klavye hazirliginda 1400 us itme fazina ulasildiktan
+    // sonra zamanlamali sekansi birak ve normal oransal THRUST yoluna
+    // kesintisiz gec. Mevcut 1400 us korunur; sonraki THRUST komutu
+    // buradan kendi hedefine kontrollu rampayla ilerler.
+    if (escYonSekansiDurumu == ESC_SEKANS_ITME_AKTIF) {
+      escYonSekansiDurumu = ESC_SEKANS_TAMAMLANDI;
+      hedefEscUs = mevcutEscUs;
+      motorDurumu = MOTOR_RUNNING;
+      sonRampMs = millis();
+      Serial.println(F("OK,ESC_DIRECTION_SEQUENCE_READY"));
+    } else if (escYonSekansiDurumu == ESC_SEKANS_TAMAMLANDI) {
+      // Seri yeniden iletimini zararsiz ve idempotent tut.
+      Serial.println(F("OK,ESC_DIRECTION_SEQUENCE_READY"));
+    } else {
+      Serial.println(F("ERR,ESC_DIRECTION_SEQUENCE_NOT_READY"));
+    }
+    return;
+  }
   if (strcmp(komut, "MOTOR_DISARM") == 0) {
     motorNotr(MOTOR_DISARMED);
     Serial.println(F("OK,MOTOR_DISARMED"));
